@@ -136,7 +136,7 @@ app.post("/webhook", async (req, res) => {
 
                 clearTimeout(timeout);
 
-                await supabase
+                const { error: dbError } = await supabase
                     .from("conversations")
                     .insert([
                         {
@@ -150,6 +150,17 @@ app.post("/webhook", async (req, res) => {
                             message: aiReply
                         }
                     ]);
+
+                if (dbError) {
+                    console.error("=== SUPABASE INSERT ERROR ===");
+                    console.error("Code:", dbError.code);
+                    console.error("Message:", dbError.message);
+                    console.error("Details:", dbError.details);
+                    console.error("Hint:", dbError.hint);
+                    console.error("============================");
+                } else {
+                    console.log("Supabase: conversation saved ✓");
+                }
 
                 await axios.post(
                     `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
@@ -256,7 +267,7 @@ Reply in the customer's language (Malay or English).
 If the customer has stated a preferred name during this conversation, use that name — not any other name — for the rest of the conversation.
 
 STRICT RULE — when a question is not covered, output EXACTLY this and nothing else after it:
-"For further details, please contact us directly:
+"Sorry, I don't have the knowledge to answer that question. For further details, please contact us directly:
 📞 +60 12-345 6789
 💬 https://wa.me/60123456789"
 
