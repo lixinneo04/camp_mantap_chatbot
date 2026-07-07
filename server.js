@@ -1,6 +1,5 @@
 require("dotenv").config();
 
-// Supabase Connection
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -9,6 +8,21 @@ const supabase = createClient(
 
 const express = require("express");
 const axios = require("axios");
+const path = require("path");          // ← ADD THIS
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const { getFAQForMessage } = require("./faq");
+
+const WELCOME_MESSAGE = `...`;          // (keep as-is)
+
+const app = express();                  // ← app created here, BEFORE routes
+const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
+
+app.use(express.json());
+
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 // Privacy Policy page
 app.get('/privacy', (req, res) => {
@@ -19,26 +33,6 @@ app.get('/privacy', (req, res) => {
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
-
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Camp Mantap FAQ Knowledge Base (Miss Jenny's official answers)
-const { getFAQForMessage } = require("./faq");
-
-// Welcome message sent to first-time customers only
-const WELCOME_MESSAGE = `👋 Hi! Selamat datang ke *Camp Mantap* 🏕️
-
-This is our official WhatsApp channel. Feel free to ask us anything about our campsite, bookings, or activities and we'll be happy to help! 😊`;
-
-const app = express();
-const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
-
-// Parse JSON payloads from Meta
-app.use(express.json());
-
-// Choose any token you want
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 // Home page
 app.get("/", (req, res) => {
