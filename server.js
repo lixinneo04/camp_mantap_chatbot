@@ -10,6 +10,16 @@ const supabase = createClient(
 const express = require("express");
 const axios = require("axios");
 
+// Privacy Policy page
+app.get('/privacy', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+});
+
+// Health Check page
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -50,16 +60,6 @@ app.get("/webhook", (req, res) => {
 
     console.log("Webhook verification failed");
     return res.sendStatus(403);
-});
-
-// Privacy Policy page
-app.get('/privacy', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
-});
-
-// Health check
-app.get('/health', (req, res) => {
-    res.status(200).send('OK');
 });
 
 // Deduplicate incoming messages — WhatsApp can send the same webhook more than once
@@ -267,7 +267,7 @@ Reply in the customer's language (Malay or English).
 If the customer has stated a preferred name during this conversation, use that name — not any other name — for the rest of the conversation.
 
 STRICT RULE — when a question is not covered, output EXACTLY this and nothing else after it:
-"Sorry, I don't have the knowledge to answer that question. For further details, please contact us directly:
+"Sorry, I don't have the knowledge to answer that. For further details, please contact us directly:
 📞 +60 12-345 6789
 💬 https://wa.me/60123456789"
 
