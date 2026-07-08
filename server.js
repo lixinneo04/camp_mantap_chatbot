@@ -14,6 +14,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const { getFAQForMessage } = require("./faq");
+const { getAvailabilityContext } = require("./availability");
 
 const WELCOME_MESSAGE = `...`;          // (keep as-is)
 
@@ -251,8 +252,16 @@ async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
         ? cachedHistory
         : await getConversationHistory(phoneNumber);
 
-    // Smart FAQ: only inject entries relevant to this specific message (~600 token saving)
-    const faqKnowledge = getFAQForMessage(userMessage);
+    // Run FAQ lookup and availability check in parallel for speed
+    const [faqKnowledge, availabilityContext] = await Promise.all([
+        Promise.resolve(getFAQForMessage(userMessage)),
+        getAvailabilityContext(userMessage)
+    ]);
+
+    // Build the availability section only when data was found
+    const availabilitySection = availabilityContext
+        ? `\n\n${availabilityContext}`
+        : "";
 
     // System prompt — keep concise to save tokens
     const systemPrompt = `You are a WhatsApp assistant for Camp Mantap campsite (near Bentong, Pahang).
@@ -261,13 +270,15 @@ Reply in the customer's language (Malay or English).
 If the customer has stated a preferred name during this conversation, use that name — not any other name — for the rest of the conversation.
 
 STRICT RULE — when a question is not covered, output EXACTLY this and nothing else after it:
-"Sorry, I don't have the knowledge to answer that. For further details, please contact us directly:
+"Sorry, I’m unable to provide an answer to that question at the moment. 😔
+
+For further details, please contact us directly:
 📞 +60 12-345 6789
-💬 https://wa.me/60123456789"
+💬 https://wa.me/60123456789
 
-NEVER add phrases like "She'll be happy to help", "happy to assist", "pasti dapat membantu", or any similar cheerful filler after the contact details.
+Miss Jenny will be happy to assist you."
 
-${faqKnowledge}`;
+${faqKnowledge}${availabilitySection}`;
 
     // Build messages array from conversation history
     const messages = [
