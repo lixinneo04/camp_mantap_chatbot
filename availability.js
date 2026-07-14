@@ -45,7 +45,7 @@ function isAvailabilityQuestion(text) {
 
 // Cache the discovered view name and date column so we only probe once per process
 let _viewName = null;
-let _dateCol  = null;
+let _dateCol = null;
 
 /**
  * Probe the view schema: fetch 1 unfiltered row to find the real date column.
@@ -113,7 +113,7 @@ async function checkAvailability(dateFrom, dateTo) {
             return { data: null, error: new Error("Could not discover view schema"), dateCol: null };
         }
         _viewName = schema.viewName;
-        _dateCol  = schema.dateCol;
+        _dateCol = schema.dateCol;
     }
 
     const { data, error } = await supabase
@@ -127,7 +127,7 @@ async function checkAvailability(dateFrom, dateTo) {
         console.error(`[Availability] Filtered query on ${_viewName} failed:`, error.message);
         // Reset cache so next call retries discovery
         _viewName = null;
-        _dateCol  = null;
+        _dateCol = null;
     } else {
         console.log(`[Availability] Fetched ${data.length} row(s) from ${_viewName} (${dateFrom} → ${dateTo})`);
     }
@@ -155,23 +155,23 @@ function formatAvailabilityForAI(rows) {
     const keys = Object.keys(sample);
 
     // Exact matches first, then regex fallbacks
-    const dateKey     = keys.find(k => k === 'stay_date') ||
-                        keys.find(k => !k.includes('_of_') && /date|tarikh/i.test(k));
-    const siteKey     = keys.find(k => k === 'room_type') ||
-                        // Exclude customer_name — only match site/room/tapak columns
-                        keys.find(k => !k.includes('customer') && /^room_type$|site|tapak|room/i.test(k));
-    const statusKey   = keys.find(k => k === 'status' || /^status$/i.test(k));
+    const dateKey = keys.find(k => k === 'stay_date') ||
+        keys.find(k => !k.includes('_of_') && /date|tarikh/i.test(k));
+    const siteKey = keys.find(k => k === 'room_type') ||
+        // Exclude customer_name — only match site/room/tapak columns
+        keys.find(k => !k.includes('customer') && /^room_type$|site|tapak|room/i.test(k));
+    const statusKey = keys.find(k => k === 'status' || /^status$/i.test(k));
 
     // Additional fields (if using the internal view or if schema expands)
-    const typeKey     = keys.find(k => k !== 'room_type' && /type|jenis|category/i.test(k));
-    const priceKey    = keys.find(k => /price|harga|rate|cost/i.test(k));
+    const typeKey = keys.find(k => k !== 'room_type' && /type|jenis|category/i.test(k));
+    const priceKey = keys.find(k => /price|harga|rate|cost/i.test(k));
     const capacityKey = keys.find(k => /capacity|pax|person|orang/i.test(k));
-    const notesKey    = keys.find(k => /note|notes|remark|catatan/i.test(k));
+    const notesKey = keys.find(k => /note|notes|remark|catatan/i.test(k));
 
     // Filter to only AVAILABLE slots to save AI prompt tokens
     let availableRows = rows;
     if (statusKey) {
-        availableRows = rows.filter(row => 
+        availableRows = rows.filter(row =>
             String(row[statusKey]).trim().toUpperCase() === "AVAILABLE" ||
             String(row[statusKey]).trim().toUpperCase() === "OPEN"
         );
@@ -187,11 +187,11 @@ function formatAvailabilityForAI(rows) {
     for (const row of availableRows) {
         const parts = [];
 
-        if (dateKey)     parts.push(`Date: ${row[dateKey]}`);
-        if (siteKey)     parts.push(`Site: ${row[siteKey]}`);
-        if (statusKey)   parts.push(`Status: AVAILABLE`);
-        if (typeKey)     parts.push(`Type: ${row[typeKey]}`);
-        if (priceKey)    parts.push(`Price: RM ${row[priceKey]}`);
+        if (dateKey) parts.push(`Date: ${row[dateKey]}`);
+        if (siteKey) parts.push(`Site: ${row[siteKey]}`);
+        if (statusKey) parts.push(`Status: AVAILABLE`);
+        if (typeKey) parts.push(`Type: ${row[typeKey]}`);
+        if (priceKey) parts.push(`Price: RM ${row[priceKey]}`);
         if (capacityKey) parts.push(`Max pax: ${row[capacityKey]}`);
         if (notesKey && row[notesKey]) parts.push(`Notes: ${row[notesKey]}`);
 
