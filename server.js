@@ -105,10 +105,14 @@ app.post("/webhook", async (req, res) => {
 
             try {
                 const timeout = setTimeout(async () => {
-                    await sendTextMessage(
-                        sender,
-                        "⏳ Reading your request, please wait a moment..."
-                    );
+                    try {
+                        await sendTextMessage(
+                            sender,
+                            "⏳ Reading your request, please wait a moment..."
+                        );
+                    } catch (err) {
+                        console.error("Failed to send typing indicator:", err.message);
+                    }
                 }, 500);
 
                 // Check if this is a new customer (no prior history)
