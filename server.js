@@ -8,7 +8,7 @@ const supabase = createClient(
 
 const express = require("express");
 const axios = require("axios");
-const path = require("path");          // ← ADD THIS
+const path = require("path");
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -16,8 +16,28 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const { getFAQForMessage } = require("./faq");
 const { getAvailabilityContext } = require("./availability");
 
-const WELCOME_MESSAGE = `...`;          // (keep as-is)
-const FALLBACK_MESSAGE = `Sorry, I'm having some technical difficulties right now. 😔\n\nPlease contact Miss Jenny directly for assistance:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789`;
+const GEMINI_MODEL = "gemini-2.5-flash";
+const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
+
+Terima kasih kerana menghubungi kami. Thank you for reaching out!
+
+I'm the Camp Mantap virtual assistant. I can help you with:
+
+📍 Location & facilities
+📅 Booking & availability
+⏰ Check-in / check-out times
+💸 Cancellation & refund policy
+⚡ Electricity usage
+🛒 Mini mart items
+🏍️ ATV rides & activities
+🌊 River & flood safety info
+
+Feel free to ask me anything in English or Bahasa Melayu!`;
+const FALLBACK_MESSAGE = `Sorry, I'm having some technical difficulties right now. 😔
+
+Please contact Miss Jenny directly for assistance:
+📞 +60 12-345 6789
+💬 https://wa.me/60123456789`;
 
 const app = express();                  // ← app created here, BEFORE routes
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -376,7 +396,7 @@ ${faqKnowledge}${availabilitySection}`;
     }
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
         systemInstruction: systemPrompt
     });
 
