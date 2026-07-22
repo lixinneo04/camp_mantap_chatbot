@@ -13,30 +13,60 @@ const supabase = createClient(
 // Keyword detector — returns true if the customer is asking about availability
 // ---------------------------------------------------------------------------
 const AVAILABILITY_KEYWORDS = [
-    // English
+    // English — booking/availability
     "available", "availability", "book", "booking", "reserve", "reservation",
     "any spot", "any site", "free slot", "open slot", "open date",
-    "is there space", "got space", "got slot", "got site",
+    "slot available", "date available", "site available", "spot available",
+    "still got", "got space", "got slot", "got site", "is there space",
     "can i camp", "can we camp", "want to camp", "plan to camp",
+    "check availability", "check booking", "check slot", "check date",
+    "any opening", "any vacancy", "vacancy", "pitch available",
+    // English — time references
     "this weekend", "next weekend", "next week", "this week",
-    "tonight", "tomorrow", "next month", "what date", "which date",
+    "tonight", "tomorrow", "tmr", "tmrw", "next month", "what date", "which date",
     "how many", "how much site", "how much spot",
+    // Informal shorthand
+    "2day", "2moro", "nxt wknd", "nxt week",
     // Malay
     "ada tempat", "ada slot", "ada tapak", "boleh book", "nak book",
     "nak tempah", "tempah", "tempahan", "kosong", "masih ada",
     "dah penuh", "penuh tak", "full tak", "ada tak", "bila ada",
     "hujung minggu", "minggu depan", "bulan depan", "esok", "malam ini",
-    "tarikh", "hari", "malam"
+    "tarikh", "hari", "malam",
+    "masih kosong", "ada ruang", "boleh tempah", "nak check", "semak"
+];
+
+/**
+ * Fuzzy regex patterns to catch common typos and misspellings.
+ * Each pattern targets a key concept, not a single exact word.
+ */
+const FUZZY_PATTERNS = [
+    // "availability" — catches: avilability, availabilty, availibility, availbility, availablity
+    /\bav[a-z]{0,3}il[a-z]{0,5}t[yi]\b/i,
+    /\bav[ai]{0,2}l[a-z]{0,4}bil[a-z]{0,3}t[yi]\b/i,
+    // "available" — catches: availble, avialable
+    /\bav[a-z]{0,2}il[a-z]{0,2}ble?\b/i,
+    // "booking" — catches: bookin, boking, bokking
+    /\bbo{1,2}ki?n?g?\b/i,
+    // "reservation" — catches: reservaton, reserrvation, rezervation
+    /\bre[sz]e?r{1,2}v[a-z]{0,4}(?:on|tion)\b/i,
+    // "vacancy" — catches: vacency, vacancey
+    /\bvac[ae]nc[ey]\b/i,
 ];
 
 /**
  * Returns true if the customer's message appears to be asking about availability.
+ * Checks exact keywords first, then fuzzy patterns for typo tolerance.
  * @param {string} text - Customer message
  * @returns {boolean}
  */
 function isAvailabilityQuestion(text) {
     const lower = text.toLowerCase();
-    return AVAILABILITY_KEYWORDS.some(kw => lower.includes(kw));
+    // 1. Exact keyword match (fast)
+    if (AVAILABILITY_KEYWORDS.some(kw => lower.includes(kw))) return true;
+    // 2. Fuzzy pattern match (catches typos)
+    if (FUZZY_PATTERNS.some(pattern => pattern.test(lower))) return true;
+    return false;
 }
 
 // ---------------------------------------------------------------------------

@@ -319,16 +319,56 @@ async function sendTextMessage(to, body) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Normalize informal shorthand so the AI understands slang & abbreviations
+// ---------------------------------------------------------------------------
+function normalizeMessage(text) {
+    return text
+        // --- Typo corrections ---
+        // "availability" variants: avilability, availabilty, availibility, availbility, availablity
+        .replace(/\bav[a-z]{0,3}il[a-z]{0,5}t[yi]\b/gi, "availability")
+        .replace(/\bav[ai]{0,2}l[a-z]{0,4}bil[a-z]{0,3}t[yi]\b/gi, "availability")
+        // "available" variants: availble, avialable
+        .replace(/\bav[a-z]{0,2}il[a-z]{0,2}ble?\b/gi, "available")
+        // "reservation" variants: reservaton, reserrvation, rezervation
+        .replace(/\bre[sz]e?r{1,2}v[a-z]{0,4}(?:on|tion)\b/gi, "reservation")
+        // --- Time abbreviations ---
+        .replace(/\btmr\b/gi, "tomorrow")
+        .replace(/\btmrw\b/gi, "tomorrow")
+        .replace(/\b2day\b/gi, "today")
+        .replace(/\b2moro?w?\b/gi, "tomorrow")
+        .replace(/\bnxt\b/gi, "next")
+        .replace(/\bwknd\b/gi, "weekend")
+        .replace(/\bsat\b/gi, "Saturday")
+        .replace(/\bsun\b/gi, "Sunday")
+        .replace(/\bmon\b/gi, "Monday")
+        .replace(/\btue?s?\b/gi, "Tuesday")
+        .replace(/\bwed\b/gi, "Wednesday")
+        .replace(/\bthur?s?\b/gi, "Thursday")
+        .replace(/\bfri\b/gi, "Friday")
+        // --- Common shorthand ---
+        .replace(/\bpls\b/gi, "please")
+        .replace(/\bplz\b/gi, "please")
+        .replace(/\bu\b/gi, "you")
+        .replace(/\br\b/gi, "are");
+}
+
 async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
+
+    // Expand informal abbreviations so the AI parses the intent correctly
+    const normalizedMessage = normalizeMessage(userMessage);
+    if (normalizedMessage !== userMessage) {
+        console.log(`[Normalize] "${userMessage}" → "${normalizedMessage}"`);
+    }
 
     const history = cachedHistory !== null
         ? cachedHistory
         : await getConversationHistory(phoneNumber);
 
-    // Run FAQ lookup and availability check in parallel for speed
+    // Run FAQ lookup and availability check using the normalized message
     const [faqKnowledge, availabilityContext] = await Promise.all([
-        Promise.resolve(getFAQForMessage(userMessage)),
-        getAvailabilityContext(userMessage)
+        Promise.resolve(getFAQForMessage(normalizedMessage)),
+        getAvailabilityContext(normalizedMessage)
     ]);
 
     // Build the availability section only when data was found
@@ -376,8 +416,8 @@ ${faqKnowledge}${availabilitySection}`;
         });
     }
 
-    // Add current user message
-    messages.push({ role: "user", content: userMessage });
+    // Add current user message (normalized for better AI understanding)
+    messages.push({ role: "user", content: normalizedMessage });
 
     console.log(`[Gemini] Sending ${messages.length - 1} message(s) for ${phoneNumber}`);
 
@@ -407,7 +447,7 @@ ${faqKnowledge}${availabilitySection}`;
         try {
 
             const chat = model.startChat({ history: geminiHistory });
-            result = await chat.sendMessage(userMessage);
+            result = await chat.sendMessage(normalizedMessage);
 
             break;
 
