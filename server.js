@@ -14,7 +14,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const { getFAQForMessage } = require("./faq");
-const { getAvailabilityContext } = require("./availability");
+const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
 
 const GEMINI_MODEL = "gemini-3.5-flash";
 const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
@@ -176,8 +176,16 @@ app.post("/webhook", async (req, res) => {
                     }
                 }, 500);
 
-                // Check if this is a new customer (no prior history)
-                const existingHistory = await getConversationHistory(sender);
+                // Normalize early so we can detect intent before fetching data
+                const normalizedText = normalizeMessage(text);
+
+                // Run history fetch + availability fetch in parallel (saves ~200-400ms)
+                const looksLikeAvailability = isAvailabilityQuestion(normalizedText);
+                const [existingHistory, preloadedAvailability] = await Promise.all([
+                    getConversationHistory(sender),
+                    looksLikeAvailability ? getAvailabilityContext(normalizedText) : Promise.resolve(undefined)
+                ]);
+
                 const isNewCustomer = existingHistory.length === 0;
 
                 // Send welcome message first for new customers
@@ -197,7 +205,8 @@ app.post("/webhook", async (req, res) => {
                     aiReply = await getAIReply(
                         text,
                         sender,
-                        existingHistory
+                        existingHistory,
+                        preloadedAvailability
                     );
                 }
 
@@ -399,7 +408,7 @@ function normalizeMessage(text) {
         .replace(/\br\b/gi, "are");
 }
 
-async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
+async function getAIReply(userMessage, phoneNumber, cachedHistory = null, preloadedAvailability = undefined) {
 
     // Expand informal abbreviations so the AI parses the intent correctly
     const normalizedMessage = normalizeMessage(userMessage);
@@ -411,10 +420,12 @@ async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
         ? cachedHistory
         : await getConversationHistory(phoneNumber);
 
-    // Run FAQ lookup and availability check using the normalized message
+    // Use pre-fetched availability if available, otherwise fetch now
     const [faqKnowledge, availabilityContext] = await Promise.all([
         Promise.resolve(getFAQForMessage(normalizedMessage)),
-        getAvailabilityContext(normalizedMessage)
+        preloadedAvailability !== undefined
+            ? Promise.resolve(preloadedAvailability)
+            : getAvailabilityContext(normalizedMessage)
     ]);
 
     // Build the availability section only when data was found

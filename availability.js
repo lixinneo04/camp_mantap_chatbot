@@ -128,14 +128,39 @@ async function discoverSchema() {
     return null; // both views unusable
 }
 
+// ---------------------------------------------------------------------------
+// Short-lived in-memory cache — avoids hitting Supabase on every message
+// ---------------------------------------------------------------------------
+const availabilityCache = {
+    data: null,
+    dateFrom: null,
+    dateTo: null,
+    fetchedAt: 0,
+    TTL: 60 * 1000  // 60 seconds
+};
+
 /**
  * Query the availability view for a date range.
+ * Results are cached for 60 seconds to avoid repeated Supabase round-trips.
  * Auto-discovers the view name and date column on first call.
  * @param {string} dateFrom - ISO date string e.g. "2025-07-08"
  * @param {string} dateTo   - ISO date string e.g. "2025-08-07"
  * @returns {{ data: object[]|null, error: object|null, dateCol: string|null }}
  */
 async function checkAvailability(dateFrom, dateTo) {
+    // Return cached result if still fresh
+    const now = Date.now();
+    if (
+        availabilityCache.data !== null &&
+        availabilityCache.dateFrom === dateFrom &&
+        availabilityCache.dateTo === dateTo &&
+        (now - availabilityCache.fetchedAt) < availabilityCache.TTL
+    ) {
+        const age = Math.round((now - availabilityCache.fetchedAt) / 1000);
+        console.log(`[Availability] Using cached data (${age}s old, TTL ${availabilityCache.TTL / 1000}s)`);
+        return { data: availabilityCache.data, error: null, dateCol: _dateCol };
+    }
+
     // Discover schema once, then cache
     if (!_viewName || !_dateCol) {
         const schema = await discoverSchema();
@@ -160,6 +185,11 @@ async function checkAvailability(dateFrom, dateTo) {
         _dateCol = null;
     } else {
         console.log(`[Availability] Fetched ${data.length} row(s) from ${_viewName} (${dateFrom} → ${dateTo})`);
+        // Store in cache
+        availabilityCache.data = data;
+        availabilityCache.dateFrom = dateFrom;
+        availabilityCache.dateTo = dateTo;
+        availabilityCache.fetchedAt = now;
     }
 
     return { data, error, dateCol: _dateCol };
