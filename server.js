@@ -39,6 +39,45 @@ Please contact Miss Jenny directly for assistance:
 📞 +60 12-345 6789
 💬 https://wa.me/60123456789`;
 
+const HUMAN_HANDOFF_MESSAGE = `Sure! You can reach our person-in-charge, *Miss Jenny*, directly:
+
+📞 *Phone / WhatsApp:* +60 12-345 6789
+💬 *WhatsApp Link:* https://wa.me/60123456789
+
+She will be happy to assist you further. 😊`;
+
+// ---------------------------------------------------------------------------
+// Detect when customer exclusively wants to speak to a human / Miss Jenny
+// ---------------------------------------------------------------------------
+function isRequestingHuman(text) {
+    const lower = text.toLowerCase();
+    const patterns = [
+        // Talk/speak/chat/connect to a person/human/agent/owner
+        /\b(talk|speak|chat|connect|contact|reach|get)\s+(to|with)\s+(a\s+)?(human|person|agent|staff|owner|someone|real\s*person)\b/i,
+        // Explicitly talk/speak to Miss Jenny (must have action verb before her name)
+        /\b(talk|speak|chat|connect|reach|call|message)\s+(to|with)\s+(miss\s*jenny|jenny)\b/i,
+        // 'contact miss jenny / contact jenny' standalone
+        /\bcontact\s+(miss\s*jenny|jenny)\b/i,
+        // 'i want/can i/please + talk/speak/chat to/with'
+        /\b(i\s+want|i'd\s+like|can\s+i|may\s+i|please)\s+(to\s+)?(talk|speak|chat|connect)\s+(to|with)\b/i,
+        // 'connect me to an agent/human/person'
+        /\bconnect\s+me\s+to\s+(a[n]?\s+)?(human|person|agent|staff|someone)\b/i,
+        // Transfer/escalate/forward to a human
+        /\b(transfer|escalate|forward)\s+(me\s+)?(to\s+)?(human|person|agent|miss\s*jenny|jenny)\b/i,
+        // person-in-charge / PIC
+        /\bperson[\s-]?in[\s-]?charge\b/i,
+        /\bpic\b/i,
+        // 'need/want to talk/contact miss jenny'
+        /\b(need|want)\s+to\s+(talk|speak|chat|contact|reach|call)\s+(to\s+|with\s+)?(miss\s*jenny|jenny)\b/i,
+        // Malay patterns
+        /\b(nak|mahu|boleh|saya\s+nak)\s+(cakap|bercakap|hubungi|contact|jumpa)\s+(dengan\s+)?(miss\s*jenny|jenny|owner|tuan|puan|orang)\b/i,
+        /\b(cakap|bercakap)\s+dengan\s+(manusia|orang\s+sebenar|staff|pekerja)\b/i,
+        /\bhubungi\s+(miss\s*jenny|jenny|owner)\b/i,
+        /\borang\s+yang\s+bertanggungjawab\b/i,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
 const app = express();                  // ← app created here, BEFORE routes
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
 
@@ -149,11 +188,18 @@ app.post("/webhook", async (req, res) => {
                     await new Promise(resolve => setTimeout(resolve, 800));
                 }
 
-                aiReply = await getAIReply(
-                    text,
-                    sender,
-                    existingHistory
-                );
+                // Check if customer is exclusively requesting to speak to a human
+                if (isRequestingHuman(text)) {
+                    console.log(`[Handoff] Human contact request detected from ${sender}`);
+                    clearTimeout(timeout);
+                    aiReply = HUMAN_HANDOFF_MESSAGE;
+                } else {
+                    aiReply = await getAIReply(
+                        text,
+                        sender,
+                        existingHistory
+                    );
+                }
 
                 clearTimeout(timeout);
 
