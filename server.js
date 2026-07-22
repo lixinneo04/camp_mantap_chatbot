@@ -16,7 +16,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const { getFAQForMessage } = require("./faq");
 const { getAvailabilityContext } = require("./availability");
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash";
 const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
 
 Terima kasih kerana menghubungi kami. Thank you for reaching out!
