@@ -228,6 +228,25 @@ app.post("/webhook", async (req, res) => {
                 } catch (sendErr) {
                     console.error("Failed to send fallback message:", sendErr.message);
                 }
+
+                // Alert admin about the error
+                const alertNumber = process.env.ALERT_PHONE_NUMBER;
+                if (alertNumber) {
+                    try {
+                        const now = new Date().toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" });
+                        const alertMsg =
+                            `⚠️ *Camp Mantap Bot Alert*\n\n` +
+                            `The bot encountered an error and sent a fallback message.\n\n` +
+                            `👤 *Affected Customer:* +${sender}\n` +
+                            `🕐 *Time:* ${now}\n` +
+                            `❌ *Error:* ${err?.message || "Unknown error"}\n\n` +
+                            `Please follow up with the customer directly.`;
+                        await sendTextMessage(alertNumber, alertMsg);
+                        console.log("Admin alert sent ✓");
+                    } catch (alertErr) {
+                        console.error("Failed to send admin alert:", alertErr.message);
+                    }
+                }
             }
         }
 
