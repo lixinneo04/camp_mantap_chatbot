@@ -17,6 +17,7 @@ const { getFAQForMessage } = require("./faq");
 const { getAvailabilityContext } = require("./availability");
 
 const WELCOME_MESSAGE = `...`;          // (keep as-is)
+const FALLBACK_MESSAGE = `Sorry, I'm having some technical difficulties right now. 😔\n\nPlease contact Miss Jenny directly for assistance:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789`;
 
 const app = express();                  // ← app created here, BEFORE routes
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -102,9 +103,10 @@ app.post("/webhook", async (req, res) => {
             console.log("Message:", text);
 
             let aiReply;
+            let timeout;
 
             try {
-                const timeout = setTimeout(async () => {
+                timeout = setTimeout(async () => {
                     try {
                         await sendTextMessage(
                             sender,
@@ -182,6 +184,7 @@ app.post("/webhook", async (req, res) => {
                 console.log("Reply sent");
 
             } catch (err) {
+                if (timeout) clearTimeout(timeout);
                 // Log full error details for debugging
                 console.error("=== AI REPLY ERROR ===");
                 console.error("Status:", err?.status || err?.response?.status);
@@ -189,11 +192,38 @@ app.post("/webhook", async (req, res) => {
                 console.error("Body:", JSON.stringify(err?.response?.data || err?.error, null, 2));
                 console.error("======================");
 
+                // Save fallback conversation to Supabase so history is maintained
+                const { error: dbError } = await supabase
+                    .from("conversations")
+                    .insert([
+                        {
+                            phone_number: sender,
+                            role: "user",
+                            message: text
+                        },
+                        {
+                            phone_number: sender,
+                            role: "assistant",
+                            message: FALLBACK_MESSAGE
+                        }
+                    ]);
+
+                if (dbError) {
+                    console.error("=== SUPABASE INSERT ERROR (FALLBACK) ===");
+                    console.error("Code:", dbError.code);
+                    console.error("Message:", dbError.message);
+                    console.error("Details:", dbError.details);
+                    console.error("Hint:", dbError.hint);
+                    console.error("========================================");
+                } else {
+                    console.log("Supabase: fallback conversation saved ✓");
+                }
+
                 // Send fallback message so customer isn't left hanging
                 try {
                     await sendTextMessage(
                         sender,
-                        `Sorry, I'm having some technical difficulties right now. 😔\n\nPlease contact Miss Jenny directly for assistance:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789`
+                        FALLBACK_MESSAGE
                     );
                 } catch (sendErr) {
                     console.error("Failed to send fallback message:", sendErr.message);
