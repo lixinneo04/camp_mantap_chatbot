@@ -13,7 +13,7 @@ const path = require("path");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const { getFAQForMessage } = require("./faq");
+const { buildFAQKnowledge } = require("./faq");
 const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
 
 const GEMINI_MODEL = "gemini-3.5-flash";
@@ -422,7 +422,7 @@ async function getAIReply(userMessage, phoneNumber, cachedHistory = null, preloa
 
     // Use pre-fetched availability if available, otherwise fetch now
     const [faqKnowledge, availabilityContext] = await Promise.all([
-        Promise.resolve(getFAQForMessage(normalizedMessage)),
+        Promise.resolve(buildFAQKnowledge()),
         preloadedAvailability !== undefined
             ? Promise.resolve(preloadedAvailability)
             : getAvailabilityContext(normalizedMessage)
