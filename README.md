@@ -213,8 +213,9 @@ The default prompt contains:
   5. Graceful hands-off to Miss Jenny for unhandled requests.
 
 ### 5.2. Safety Constraints
-* **Strict Context Adherence**: Gemini is instructed to answer *only* based on the dynamically injected FAQ and Availability contexts.
-* **Missing Information Fallback**: If a query is not covered by the context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
+* **Context Adherence**: Gemini is instructed to answer strictly based on the system prompt narrative (about itself/services), and the dynamically injected FAQ and Availability contexts.
+* **Identity & Service Inquiries**: If the customer asks who the assistant is or what general services Camp Mantap provides, the bot is allowed to answer using the prompt narrative and the corresponding entry in `faq.js`.
+* **Missing Information Fallback**: If a query is not covered by the system prompt narrative, FAQ, or Availability Context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
   ```text
   Sorry, I'm unable to provide an answer to that question at the moment. 😔
   

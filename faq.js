@@ -5,6 +5,27 @@
 const FAQ = [
     {
         topics: [
+            "who are you", "siapa kamu", "siapa anda", "siapa jk", "what is this", "apa ini",
+            "what service", "servis apa", "services", "perkhidmatan", "provide", "tawarkan",
+            "about us", "tentang kami", "campsite", "tapak perkhemahan", "kemudahan"
+        ],
+        answer: `ABOUT US & SERVICES:
+I am the virtual WhatsApp assistant for Camp Mantap.
+
+Camp Mantap is a premium campsite located around 20-25 minutes drive from Bentong, Pahang, where all our campsites face a beautiful river.
+
+We provide:
+- Riverfront camping sites (all sites face the river)
+- 24-hour electricity plug points at each campsite
+- Firepits at each campsite
+- Toilets with water heaters (+soap) and washing areas
+- Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)
+- Surau and close-by car parking
+- WiFi (Celcom/Digi)
+- Guided ATV tours (RM 70 per car), archery, and other seasonal activities`
+    },
+    {
+        topics: [
             "location", "where", "mana", "address", "alamat",
             "camp mantap", "bentong", "how to get", "directions"
         ],
