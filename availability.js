@@ -1,6 +1,5 @@
 // Camp Mantap — Booking Availability Module
 // Queries Supabase views to provide real-time availability data to the AI assistant.
-
 require("dotenv").config();
 
 const { createClient } = require('@supabase/supabase-js');

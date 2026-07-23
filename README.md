@@ -33,8 +33,8 @@ sequenceDiagram
         Srv->>DB: Fetch last 10 historical conversation messages
         DB-->>Srv: Return chat history
         
-        par FAQ Lookup
-            Srv->>Srv: getFAQForMessage(): Checks keywords in query
+        par Static Context Injection
+            Srv->>Srv: KNOWLEDGE_BASE: Reads markdown text base
         and Live Availability Lookup (if requested)
             Srv->>DB: Query view_availability_public / view_availability
             DB-->>Srv: Return raw rows of active availability (next 30 days)
@@ -102,13 +102,10 @@ Dynamically reads live booking records from Supabase and translates database rec
   * Filters out occupied spots, only retaining rows matching status `AVAILABLE` or `OPEN`.
   * Outputs a structured text block: `• Date: YYYY-MM-DD | Site: Tapak A | Status: AVAILABLE | Price: RM X | Max pax: Y`.
 
-### 3.3. `faq.js` (Knowledge Base)
+### 3.3. `knowledge_base.md` (Unified Knowledge Base)
 Acts as the static source of truth for campsite parameters verified by administration.
-* **Knowledge Entries**: Contains categorized FAQ items (Location & facilities, Check-in/out times, Mini Mart items, Cancellations & refunds, Electricity constraints, ATV Rides, Camper van policy, River safety).
-* **Keyword Matching (`getFAQForMessage`)**:
-  * Checks if the message content matches the keyword arrays linked to specific FAQ topics.
-  * Extracts and combines matching FAQs into a custom block.
-  * If no matches are found, it generates a list of topics the bot is capable of answering, setting clear boundaries for the LLM.
+* **Content Structure**: Contains all campsite rules, policies, schedules, locations, booking links, and facilities formatted in standard Markdown.
+* **System Prompt Injection**: Loaded once during server start-up and injected directly into the Gemini `systemInstruction` context. This removes the need for brittle keyword-matching algorithms, giving the AI model native comprehension over all policies.
 
 ---
 
@@ -145,7 +142,7 @@ The sequence of operations when a webhook is triggered follows:
                 │                                       │
                 ├─────── Yes ──► [Send Welcome Message] │
                 │                                       ▼ Yes
-     [Fetch FAQ & Availability Context] ───────► [Send "Reading your request..." text]
+     [Load Knowledge Base & Fetch Availability] ──► [Send "Reading your request..." text]
                 │
      [Construct System Prompt]
      [Invoke Gemini 2.5 Flash]
@@ -213,9 +210,9 @@ The default prompt contains:
   5. Graceful hands-off to Miss Jenny for unhandled requests.
 
 ### 5.2. Safety Constraints
-* **Context Adherence**: Gemini is instructed to answer strictly based on the system prompt narrative (about itself/services), and the dynamically injected FAQ and Availability contexts.
-* **Identity & Service Inquiries**: If the customer asks who the assistant is or what general services Camp Mantap provides, the bot is allowed to answer using the prompt narrative and the corresponding entry in `faq.js`.
-* **Missing Information Fallback**: If a query is not covered by the system prompt narrative, FAQ, or Availability Context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
+* **Context Adherence**: Gemini is instructed to answer strictly based on the system prompt narrative (about yourself/services), and the injected Knowledge Base and Availability contexts.
+* **Identity & Service Inquiries**: If the customer asks who the assistant is or what general services Camp Mantap provides, the bot is allowed to answer using the system prompt narrative or the knowledge_base.md details.
+* **Missing Information Fallback**: If a query is not covered by the system prompt narrative, Knowledge Base, or Availability Context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
   ```text
   Sorry, I'm unable to provide an answer to that question at the moment. 😔
   
