@@ -188,20 +188,42 @@ To minimize maintenance as DB views evolve, the schema discovery executes as fol
 
 ---
 
-## 5. Fallback Rules & Prompt Safety Constraints
+## 5. System Prompt, Fallback Rules & Safety Constraints
 
-The assistant adheres to safety guidelines to prevent hallucinations:
+The AI assistant's default prompt is designed as a narrative description of Camp Mantap's services, policies, and the assistant's tasks to guide responses effectively:
 
-1. **Strict Context Adherence**: Gemini is configured with instructions restricting it to answer *only* based on the custom injected FAQs and Availability block.
-2. **Missing Information Fallback**: If a query is not covered by the context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
-   ```text
-   Sorry, I’m unable to provide an answer to that question at the moment. 😔
-   
-   For further details, please contact us directly:
-   📞 +60 12-345 6789
-   💬 https://wa.me/60123456789
-   
-   Miss Jenny will be happy to assist you.
-   ```
-3. **Preferred Name Memory**: The system instructions prompt Gemini to adopt and remember the name by which the customer wishes to be addressed, overriding other names.
-4. **Stale Message Defense**: Restricts webhook handling to messages under 30 seconds old. This prevents the server from spamming customers with delayed replies after periods of offline server maintenance or ngrok restarts.
+### 5.1. System Prompt Narrative
+The default prompt contains:
+* **Campsite Overview**: A narrative introducing Camp Mantap as a premium riverfront campsite near Bentong, Pahang, emphasizing that every site directly faces the river.
+* **Services & Facilities Guide**:
+  * 24-hour electricity plug points (below 1000W, extension cable required).
+  * Toilets with hot showers, dishwashing areas, firepits.
+  * Self-service Mini Mart details (selling ice, firewood, snacks, drinks, operating via Touch 'n Go / QR).
+  * WiFi (Celcom/Digi) and guided activities (ATV tours at RM 70/car, archery, seasonal fruits).
+* **Strict Policies**:
+  * Camper vans, RVs, and motorhomes are not recommended (due to narrow roads, clearance, single-phase power).
+  * EV charging and portable power stations are strictly prohibited.
+  * Official check-in (2:00 PM) / check-out (12:00 PM) times.
+  * River flood safety standards (compound is 10 feet above riverbed, warning siren, active rain monitoring).
+* **Assistant Tasks**:
+  1. Greet guests and represent Camp Mantap in a professional, polite, matter-of-fact tone.
+  2. Dynamic language support (Malay and English).
+  3. Strict name personalization (remember and use customer's stated name).
+  4. Context-based response compilation.
+  5. Graceful hands-off to Miss Jenny for unhandled requests.
+
+### 5.2. Safety Constraints
+* **Strict Context Adherence**: Gemini is instructed to answer *only* based on the dynamically injected FAQ and Availability contexts.
+* **Missing Information Fallback**: If a query is not covered by the context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
+  ```text
+  Sorry, I'm unable to provide an answer to that question at the moment. 😔
+  
+  For further details, please contact us directly:
+  📞 +60 12-345 6789
+  💬 https://wa.me/60123456789
+  
+  Miss Jenny will be happy to assist you.
+  ```
+* **Preferred Name Memory**: The prompt instructs Gemini to adopt and remember the name by which the customer wishes to be addressed.
+* **Stale Message Defense**: Restricts webhook handling to messages under 30 seconds old to prevent spamming customers after server downtime.
+* **WhatsApp-specific Formatting**: Constrains the AI to use lists starting with `- ` (never `* ` as bullets), wrap bold text with single asterisks (`*bold*`), avoid double asterisks (`**bold**`), and output well-spaced messages.
