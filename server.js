@@ -13,7 +13,9 @@ const path = require("path");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const { getFAQForMessage } = require("./faq");
+const fs = require("fs");
+const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
+
 const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
 
 const GEMINI_MODEL = "gemini-3.5-flash";
@@ -421,12 +423,9 @@ async function getAIReply(userMessage, phoneNumber, cachedHistory = null, preloa
         : await getConversationHistory(phoneNumber);
 
     // Use pre-fetched availability if available, otherwise fetch now
-    const [faqKnowledge, availabilityContext] = await Promise.all([
-        Promise.resolve(getFAQForMessage(normalizedMessage)),
-        preloadedAvailability !== undefined
-            ? Promise.resolve(preloadedAvailability)
-            : getAvailabilityContext(normalizedMessage)
-    ]);
+    const availabilityContext = preloadedAvailability !== undefined
+        ? preloadedAvailability
+        : await getAvailabilityContext(normalizedMessage);
 
     // Build the availability section only when data was found
     const availabilitySection = availabilityContext
@@ -454,8 +453,9 @@ YOUR TASKS:
 1. Warmly greet guests, representing Camp Mantap with a helpful, polite, professional, and matter-of-fact tone.
 2. Reply in the customer's language (Malay or English).
 3. If the customer states a preferred name during the conversation, remember it and address them by that name exclusively.
-4. Answer FAQs, booking availability, pricing, rules, and campsite parameters accurately using the context below.
-5. If a question is not covered in the provided FAQ or Availability Context, output EXACTLY our standard fallback message and refer them to Miss Jenny.
+4. **PRIORITY — Booking Availability**: If the customer asks about booking slots, available dates, or site availability, you MUST prioritize checking the "LIVE BOOKING AVAILABILITY" section first. Respond accurately using only the available sites, dates, and prices shown. If the requested dates are not shown as available, or no live availability context is provided, state that you cannot confirm availability for those dates and guide them to check availability using the booking links.
+5. Answer other FAQs, rules, and campsite parameters using the Knowledge Base.
+6. If a question is not covered in the provided Knowledge Base or Availability Context, output EXACTLY our standard fallback message and refer them to Miss Jenny.
 
 WHATSAPP FORMATTING RULES (MUST follow strictly):
 - For bullet points and lists, ALWAYS use a dash (-) followed by a space. NEVER use asterisk (*) as a bullet point.
@@ -464,12 +464,13 @@ WHATSAPP FORMATTING RULES (MUST follow strictly):
 - Do NOT mix * as both bullet AND bold in the same message. Use - for bullets and *text* for bold only.
 - Keep responses concise and well-spaced for easy reading on mobile.
 
-CRITICAL INSTRUCTION: Your responses MUST be strictly based ONLY on the system prompt narrative (about yourself/services), and the provided FAQ and Availability Context below. 
+CRITICAL INSTRUCTION: Your responses MUST be strictly based ONLY on the system prompt narrative (about yourself/services), and the provided Knowledge Base and Availability Context below. 
 DO NOT make up any information, prices, policies, or facts. 
+If the customer asks about booking or date availability, prioritize the "LIVE BOOKING AVAILABILITY" section over general rules.
 If the customer asks who you are or what general services Camp Mantap provides, answer using the "ABOUT CAMP MANTAP SERVICES & FACILITIES" section from this system prompt. 
 For other specific questions, if the provided context does not contain the answer, you MUST NOT guess or use outside knowledge.
 
-STRICT RULE — when a question is not covered in the provided system prompt narrative, FAQ, or Availability Context, output EXACTLY this and nothing else after it:
+STRICT RULE — when a question is not covered in the provided system prompt narrative, Knowledge Base, or Availability Context, output EXACTLY this and nothing else after it:
 "Sorry, I'm unable to provide an answer to that question at the moment. 😔
 
 For further details, please contact us directly:
@@ -478,7 +479,9 @@ For further details, please contact us directly:
 
 Miss Jenny will be happy to assist you."
 
-${faqKnowledge}${availabilitySection}`;
+=== CAMP MANTAP OFFICIAL KNOWLEDGE BASE ===
+${KNOWLEDGE_BASE}
+=== END OF KNOWLEDGE BASE ===${availabilitySection}`;
 
     // Build messages array from conversation history
     const messages = [
