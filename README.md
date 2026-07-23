@@ -34,7 +34,7 @@ sequenceDiagram
         DB-->>Srv: Return chat history
         
         par FAQ Lookup
-            Srv->>Srv: buildFAQKnowledge(): Injects complete FAQ knowledge base
+            Srv->>Srv: getFAQForMessage(): Checks keywords in query
         and Live Availability Lookup (if requested)
             Srv->>DB: Query view_availability_public / view_availability
             DB-->>Srv: Return raw rows of active availability (next 30 days)
@@ -105,9 +105,10 @@ Dynamically reads live booking records from Supabase and translates database rec
 ### 3.3. `faq.js` (Knowledge Base)
 Acts as the static source of truth for campsite parameters verified by administration.
 * **Knowledge Entries**: Contains categorized FAQ items (Location & facilities, Check-in/out times, Mini Mart items, Cancellations & refunds, Electricity constraints, ATV Rides, Camper van policy, River safety).
-* **Context Injection (`buildFAQKnowledge`)**:
-  * Injects the entire FAQ database directly into the AI system instructions.
-  * Relies on Gemini's large context window (1M+ tokens) to accurately match questions and synthesize responses without needing brittle keyword filters.
+* **Keyword Matching (`getFAQForMessage`)**:
+  * Checks if the message content matches the keyword arrays linked to specific FAQ topics.
+  * Extracts and combines matching FAQs into a custom block.
+  * If no matches are found, it generates a list of topics the bot is capable of answering, setting clear boundaries for the LLM.
 
 ---
 

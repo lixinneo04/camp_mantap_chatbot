@@ -159,6 +159,25 @@ During heavy rain, water levels can rise significantly and we have seen a highes
 We cannot say that our area will never flood as Nature is very hard to predict. Therefore, we have installed a siren warning system and we will monitor the river when it rains, even in the early hours.
 
 Semasa hujan lebat, paras air akan meningkat dengan ketara dan kami telah melihat paras tertinggi iaitu 7 kaki. Perkarangan kami berada pada 10 kaki di atas dan setakat ini kami tidak menemui air melimpah ke kawasan kami.`
+    },
+    {
+        topics: [
+            "book", "booking", "reserve", "reservation", "tapak", "how to book", "cara book",
+            "cara tempah", "tempah", "tempahan", "booktapak", "escabee", "link", "website"
+        ],
+        answer: `HOW TO BOOK / CARA TEMPAHAN:
+
+To make a booking at Camp Mantap, you can check availability and book through our official online platforms:
+
+- *BookTapak:* https://booktapak.com/property/campmantap?locale=en
+- *Escabee:* https://escabee.com/campsites/camp-mantap
+
+---
+
+Untuk membuat tempahan di Camp Mantap, anda boleh menyemak kekosongan dan menempah melalui platform dalam talian rasmi kami:
+
+- *BookTapak:* https://booktapak.com/property/campmantap?locale=en
+- *Escabee:* https://escabee.com/campsites/camp-mantap`
     }
 ];
 
