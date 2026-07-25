@@ -44,9 +44,23 @@ const CONTEXTUAL_AVAILABILITY_PATTERNS = [
     /\bbila\s+ada\b/i
 ];
 
+const DATE_FORMAT_PATTERNS = [
+    // DD/MM or DD/MM/YYYY or DD-MM or DD-MM-YYYY or DD.MM.YYYY (e.g. 31/7, 25-07-2026, 31.7)
+    /\b(?:0?[1-9]|[12]\d|3[01])[/\-.](?:0?[1-9]|1[0-2])(?:[/\-.](?:\d{4}|\d{2}))?\b/,
+    
+    // YYYY-MM-DD or YYYY/MM/DD (e.g. 2026-07-25, 2026/07/25)
+    /\b\d{4}[/\-.](?:0?[1-9]|1[0-2])[/\-.](?:0?[1-9]|[12]\d|3[01])\b/,
+    
+    // Day followed by Month (e.g. 31 July, 31hb Julai, 31st of July)
+    /\b(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th|hb)?\s*(?:of\s+)?(?:jan(?:uary)?|januari|feb(?:ruary)?|februari|mar(?:ch)?|mac|apr(?:il)?|may|mei|jun(?:e)?|jul(?:y)?|julai|aug(?:ust)?|ogos|sept?(?:ember)?|oct(?:ober)?|oktober|nov(?:ember)?|november|dec(?:ember)?|disember)\b/i,
+    
+    // Month followed by Day (e.g. July 31st, Julai 31)
+    /\b(?:jan(?:uary)?|januari|feb(?:ruary)?|februari|mar(?:ch)?|mac|apr(?:il)?|may|mei|jun(?:e)?|jul(?:y)?|julai|aug(?:ust)?|ogos|sept?(?:ember)?|oct(?:ober)?|oktober|nov(?:ember)?|november|dec(?:ember)?|disember)\s*(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b/i
+];
+
 /**
  * Returns true if the customer's message appears to be asking about availability.
- * Checks exact keywords first, then fuzzy patterns for typo tolerance.
+ * Checks exact keywords first, then date formats, and then contextual patterns.
  * @param {string} text - Customer message
  * @returns {boolean}
  */
@@ -58,7 +72,12 @@ function isAvailabilityQuestion(text) {
         if (DIRECT_AVAILABILITY_PATTERNS[i].test(lower)) return true;
     }
 
-    // 2. Contextual patterns
+    // 2. Date format patterns
+    for (let i = 0; i < DATE_FORMAT_PATTERNS.length; i++) {
+        if (DATE_FORMAT_PATTERNS[i].test(lower)) return true;
+    }
+
+    // 3. Contextual patterns
     for (let i = 0; i < CONTEXTUAL_AVAILABILITY_PATTERNS.length; i++) {
         if (CONTEXTUAL_AVAILABILITY_PATTERNS[i].test(lower)) return true;
     }
