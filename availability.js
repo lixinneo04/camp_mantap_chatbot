@@ -2,6 +2,10 @@
 // Queries Supabase views to provide real-time availability data to the AI assistant.
 require("dotenv").config();
 
+if (typeof global.WebSocket === "undefined") {
+    global.WebSocket = class {};
+}
+
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -11,46 +15,33 @@ const supabase = createClient(
 // ---------------------------------------------------------------------------
 // Keyword detector — returns true if the customer is asking about availability
 // ---------------------------------------------------------------------------
-const AVAILABILITY_KEYWORDS = [
-    // English — booking/availability
-    "available", "availability", "book", "booking", "reserve", "reservation",
-    "any spot", "any site", "free slot", "open slot", "open date",
-    "slot available", "date available", "site available", "spot available",
-    "still got", "got space", "got slot", "got site", "is there space",
-    "can i camp", "can we camp", "want to camp", "plan to camp",
-    "check availability", "check booking", "check slot", "check date",
-    "any opening", "any vacancy", "vacancy", "pitch available",
-    // English — time references
-    "this weekend", "next weekend", "next week", "this week",
-    "tonight", "tomorrow", "tmr", "tmrw", "next month", "what date", "which date",
-    "how many", "how much site", "how much spot",
-    // Informal shorthand
-    "2day", "2moro", "nxt wknd", "nxt week",
-    // Malay
-    "ada tempat", "ada slot", "ada tapak", "boleh book", "nak book",
-    "nak tempah", "tempah", "tempahan", "kosong", "masih ada",
-    "dah penuh", "penuh tak", "full tak", "ada tak", "bila ada",
-    "hujung minggu", "minggu depan", "bulan depan", "esok", "malam ini",
-    "tarikh", "hari", "malam",
-    "masih kosong", "ada ruang", "boleh tempah", "nak check", "semak"
+const DIRECT_AVAILABILITY_PATTERNS = [
+    /\bav[a-z]{0,3}il[a-z]{0,5}t[yi]\b/i,        // availability / availabiliti / avilability / availabilty
+    /\bav[a-z]{0,2}il[a-z]{0,2}ble?\b/i,          // available / availble / avialable
+    /\bbo{1,2}ki?n?g?\b/i,                        // book / booking / boking / bokking
+    /\bre[sz]e?r{1,2}v[a-z]{0,4}(?:on|tion)\b/i, // reserve / reservation / reservaton
+    /\bvac[ae]nc[ey]\b/i,                         // vacancy / vacancies
+    /\btempah(an)?\b/i                            // tempah / tempahan
 ];
 
-/**
- * Fuzzy regex patterns to catch common typos and misspellings.
- * Each pattern targets a key concept, not a single exact word.
- */
-const FUZZY_PATTERNS = [
-    // "availability" — catches: avilability, availabilty, availibility, availbility, availablity
-    /\bav[a-z]{0,3}il[a-z]{0,5}t[yi]\b/i,
-    /\bav[ai]{0,2}l[a-z]{0,4}bil[a-z]{0,3}t[yi]\b/i,
-    // "available" — catches: availble, avialable
-    /\bav[a-z]{0,2}il[a-z]{0,2}ble?\b/i,
-    // "booking" — catches: bookin, boking, bokking
-    /\bbo{1,2}ki?n?g?\b/i,
-    // "reservation" — catches: reservaton, reserrvation, rezervation
-    /\bre[sz]e?r{1,2}v[a-z]{0,4}(?:on|tion)\b/i,
-    // "vacancy" — catches: vacency, vacancey
-    /\bvac[ae]nc[ey]\b/i,
+const CONTEXTUAL_AVAILABILITY_PATTERNS = [
+    // English: combinations of inquiry/intent + slot terms
+    /\b(?:any|free|open|got|check|still|want|plan|can|is\s+there|what|which)\s+(?:[a-z]+\s+)?(?:slot|site|spot|space|room|pitch|opening|date|day)s?\b/i,
+    // English: slot terms + available
+    /\b(?:slot|site|spot|space|room|pitch|opening|date|day)s?\s+(?:is\s+)?available\b/i,
+    // English: "still got" or "got space/slot/site/spot"
+    /\b(?:still\s+got|got\s+(?:space|slot|site|spot|room))\b/i,
+    // English: camp intent
+    /\b(?:can|want|plan)\s+(?:we|i)?\s*camp\b/i,
+    
+    // Malay: combinations of inquiry/status + slot terms
+    /\b(?:ada|kosong|penuh|full|boleh|nak|check|semak|bila|masih)\s+(?:[a-z]+\s+)?(?:tempat|slot|tapak|ruang|tarikh|hari)s?\b/i,
+    // Malay: specific availability indicators
+    /\b(?:kosong|full|penuh)\s+tak\b/i,
+    /\b(?:masih|ada)\s+kosong\b/i,
+    /\bboleh\s+camp\b/i,
+    /\bmasih\s+ada\b/i,
+    /\bbila\s+ada\b/i
 ];
 
 /**
@@ -61,10 +52,17 @@ const FUZZY_PATTERNS = [
  */
 function isAvailabilityQuestion(text) {
     const lower = text.toLowerCase();
-    // 1. Exact keyword match (fast)
-    if (AVAILABILITY_KEYWORDS.some(kw => lower.includes(kw))) return true;
-    // 2. Fuzzy pattern match (catches typos)
-    if (FUZZY_PATTERNS.some(pattern => pattern.test(lower))) return true;
+
+    // 1. Direct patterns (fast match for booking/availability words)
+    for (let i = 0; i < DIRECT_AVAILABILITY_PATTERNS.length; i++) {
+        if (DIRECT_AVAILABILITY_PATTERNS[i].test(lower)) return true;
+    }
+
+    // 2. Contextual patterns
+    for (let i = 0; i < CONTEXTUAL_AVAILABILITY_PATTERNS.length; i++) {
+        if (CONTEXTUAL_AVAILABILITY_PATTERNS[i].test(lower)) return true;
+    }
+
     return false;
 }
 
@@ -72,14 +70,20 @@ function isAvailabilityQuestion(text) {
 // Supabase query — with auto schema discovery
 // ---------------------------------------------------------------------------
 
-// Cache the discovered view name and date column so we only probe once per process
+// Cache the discovered view name and column mappings so we only probe once per process
 let _viewName = null;
 let _dateCol = null;
+let _siteCol = null;
+let _statusCol = null;
+let _typeCol = null;
+let _priceCol = null;
+let _capacityCol = null;
+let _notesCol = null;
 
 /**
- * Probe the view schema: fetch 1 unfiltered row to find the real date column.
+ * Probe the view schema: fetch 1 unfiltered row to find the columns.
  * Tries view_availability_public first, then view_availability.
- * Returns { viewName, dateCol } or null on failure.
+ * Returns the schema metadata or null on failure.
  */
 async function discoverSchema() {
     const views = ["view_availability_public", "view_availability"];
@@ -104,16 +108,25 @@ async function discoverSchema() {
         console.log(`[Availability] ${view} columns:`, keys.join(", "));
         console.log(`[Availability] Sample row:`, JSON.stringify(data[0]));
 
-        // Detect the date column:
-        // 1. Prefer a column whose VALUE looks like YYYY-MM-DD (most reliable)
+        // Detect all columns once:
         const dateCol =
             keys.find(k => /^\d{4}-\d{2}-\d{2}/.test(String(data[0][k]))) ||
-            // 2. Name contains "stay_date", "date", "tarikh", "check" — but NOT "day_of_week"
             keys.find(k => !k.includes('_of_') && /stay_date|^date$|tarikh|check_in|check_out/i.test(k)) ||
-            // 3. Generic: any column with "date" in the name, excluding _of_ patterns
             keys.find(k => !k.includes('_of_') && /date/i.test(k)) ||
-            // 4. Last resort: "start" or "begin"
             keys.find(k => /start|begin/i.test(k));
+
+        const siteCol = keys.find(k => k === 'room_type') ||
+            keys.find(k => !k.includes('customer') && /^room_type$|site|tapak|room/i.test(k));
+
+        const statusCol = keys.find(k => k === 'status' || /^status$/i.test(k));
+
+        const typeCol = keys.find(k => k !== 'room_type' && /type|jenis|category/i.test(k));
+
+        const priceCol = keys.find(k => /price|harga|rate|cost/i.test(k));
+
+        const capacityCol = keys.find(k => /capacity|pax|person|orang/i.test(k));
+
+        const notesCol = keys.find(k => /note|notes|remark|catatan/i.test(k));
 
         if (!dateCol) {
             console.warn(`[Availability] Could not detect a date column in ${view}. Columns: ${keys.join(", ")}`);
@@ -121,11 +134,38 @@ async function discoverSchema() {
         }
 
         console.log(`[Availability] Using view="${view}", dateCol="${dateCol}"`);
-        return { viewName: view, dateCol };
+        return {
+            viewName: view,
+            dateCol,
+            siteCol,
+            statusCol,
+            typeCol,
+            priceCol,
+            capacityCol,
+            notesCol
+        };
     }
 
     return null; // both views unusable
 }
+
+// Helper to apply discovered schema
+function applySchema(schema) {
+    if (!schema) return;
+    _viewName = schema.viewName;
+    _dateCol = schema.dateCol;
+    _siteCol = schema.siteCol;
+    _statusCol = schema.statusCol;
+    _typeCol = schema.typeCol;
+    _priceCol = schema.priceCol;
+    _capacityCol = schema.capacityCol;
+    _notesCol = schema.notesCol;
+}
+
+// Pre-discover schema at startup to eliminate latency on first request
+discoverSchema().then(applySchema).catch(err => {
+    console.warn("[Availability] Pre-discovery of schema failed:", err.message);
+});
 
 // ---------------------------------------------------------------------------
 // Short-lived in-memory cache — avoids hitting Supabase on every message
@@ -166,16 +206,21 @@ async function checkAvailability(dateFrom, dateTo) {
         if (!schema) {
             return { data: null, error: new Error("Could not discover view schema"), dateCol: null };
         }
-        _viewName = schema.viewName;
-        _dateCol = schema.dateCol;
+        applySchema(schema);
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from(_viewName)
         .select("*")
         .gte(_dateCol, dateFrom)
-        .lte(_dateCol, dateTo)
-        .order(_dateCol, { ascending: true });
+        .lte(_dateCol, dateTo);
+
+    // Filter by status directly in the database to optimize network load and response speed
+    if (_statusCol) {
+        query = query.in(_statusCol, ["AVAILABLE", "Available", "available", "OPEN", "Open", "open"]);
+    }
+
+    const { data, error } = await query.order(_dateCol, { ascending: true });
 
     if (error) {
         console.error(`[Availability] Filtered query on ${_viewName} failed:`, error.message);
@@ -193,7 +238,6 @@ async function checkAvailability(dateFrom, dateTo) {
 
     return { data, error, dateCol: _dateCol };
 }
-
 // ---------------------------------------------------------------------------
 // Formatter — turns raw Supabase rows into a readable AI prompt block
 // ---------------------------------------------------------------------------
@@ -205,57 +249,66 @@ async function checkAvailability(dateFrom, dateTo) {
  * @returns {string}
  */
 function formatAvailabilityForAI(rows) {
-    if (!rows || rows.length === 0) {
+    if (!rows) return "No availability data found for the requested period.";
+    if (rows.length === 0) {
         return "No availability data found for the requested period.";
     }
 
-    // Detect common column name patterns (prioritizing the known view schema)
-    const sample = rows[0];
-    const keys = Object.keys(sample);
-
-    // Exact matches first, then regex fallbacks
-    const dateKey = keys.find(k => k === 'stay_date') ||
-        keys.find(k => !k.includes('_of_') && /date|tarikh/i.test(k));
-    const siteKey = keys.find(k => k === 'room_type') ||
-        // Exclude customer_name — only match site/room/tapak columns
-        keys.find(k => !k.includes('customer') && /^room_type$|site|tapak|room/i.test(k));
-    const statusKey = keys.find(k => k === 'status' || /^status$/i.test(k));
-
-    // Additional fields (if using the internal view or if schema expands)
-    const typeKey = keys.find(k => k !== 'room_type' && /type|jenis|category/i.test(k));
-    const priceKey = keys.find(k => /price|harga|rate|cost/i.test(k));
-    const capacityKey = keys.find(k => /capacity|pax|person|orang/i.test(k));
-    const notesKey = keys.find(k => /note|notes|remark|catatan/i.test(k));
-
-    // Filter to only AVAILABLE slots to save AI prompt tokens
-    let availableRows = rows;
-    if (statusKey) {
-        availableRows = rows.filter(row =>
-            String(row[statusKey]).trim().toUpperCase() === "AVAILABLE" ||
-            String(row[statusKey]).trim().toUpperCase() === "OPEN"
-        );
-    }
-
-    if (availableRows.length === 0) {
-        return "All sites are FULLY BOOKED for the requested period.";
-    }
+    // Fallback: If cache variables are not set, discover them dynamically from rows[0]
+    const dateKey = _dateCol || Object.keys(rows[0]).find(k => /^\d{4}-\d{2}-\d{2}/.test(String(rows[0][k]))) || Object.keys(rows[0]).find(k => {
+        if (k.includes('_of_')) return false;
+        return /stay_date|^date$|tarikh/i.test(k);
+    });
+    
+    const siteKey = _siteCol || Object.keys(rows[0]).find(k => k === 'room_type') || Object.keys(rows[0]).find(k => {
+        if (k.includes('customer')) return false;
+        return /^room_type$|site|tapak|room/i.test(k);
+    });
+    
+    const typeKey = _typeCol || Object.keys(rows[0]).find(k => k !== 'room_type' && /type|jenis|category/i.test(k));
+    const priceKey = _priceCol || Object.keys(rows[0]).find(k => /price|harga|rate|cost/i.test(k));
+    const capacityKey = _capacityCol || Object.keys(rows[0]).find(k => /capacity|pax|person|orang/i.test(k));
+    const notesKey = _notesCol || Object.keys(rows[0]).find(k => /note|notes|remark|catatan/i.test(k));
 
     let block = "";
 
-    // We only want to output available slots to save tokens and reduce noise
-    for (const row of availableRows) {
+    for (const row of rows) {
         const parts = [];
 
-        if (dateKey) parts.push(`Date: ${row[dateKey]}`);
-        if (siteKey) parts.push(`Site: ${row[siteKey]}`);
-        if (statusKey) parts.push(`Status: AVAILABLE`);
-        if (typeKey) parts.push(`Type: ${row[typeKey]}`);
-        if (priceKey) parts.push(`Price: RM ${row[priceKey]}`);
-        if (capacityKey) parts.push(`Max pax: ${row[capacityKey]}`);
-        if (notesKey && row[notesKey]) parts.push(`Notes: ${row[notesKey]}`);
+        if (dateKey) {
+            if (row[dateKey]) {
+                parts.push("Date: " + row[dateKey]);
+            }
+        }
+        if (siteKey) {
+            if (row[siteKey]) {
+                parts.push("Site: " + row[siteKey]);
+            }
+        }
+        parts.push("Status: AVAILABLE");
+        if (typeKey) {
+            if (row[typeKey]) {
+                parts.push("Type: " + row[typeKey]);
+            }
+        }
+        if (priceKey) {
+            if (row[priceKey]) {
+                parts.push("Price: RM " + row[priceKey]);
+            }
+        }
+        if (capacityKey) {
+            if (row[capacityKey]) {
+                parts.push("Max pax: " + row[capacityKey]);
+            }
+        }
+        if (notesKey) {
+            if (row[notesKey]) {
+                parts.push("Notes: " + row[notesKey]);
+            }
+        }
 
         // If we couldn't detect standard columns, dump everything safe
-        if (parts.length === 0) {
+        if (parts.length === 0 || parts.length === 1) {
             parts.push(JSON.stringify(row));
         }
 
