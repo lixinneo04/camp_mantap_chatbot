@@ -164,20 +164,8 @@ app.post("/webhook", async (req, res) => {
             console.log("Message:", text);
 
             let aiReply;
-            let timeout;
 
             try {
-                timeout = setTimeout(async () => {
-                    try {
-                        await sendTextMessage(
-                            sender,
-                            "⏳ Reading your request, please wait a moment..."
-                        );
-                    } catch (err) {
-                        console.error("Failed to send typing indicator:", err.message);
-                    }
-                }, 500);
-
                 // Normalize early so we can detect intent before fetching data
                 const normalizedText = normalizeMessage(text);
 
@@ -190,18 +178,9 @@ app.post("/webhook", async (req, res) => {
 
                 const isNewCustomer = existingHistory.length === 0;
 
-                // Send welcome message first for new customers
-                if (isNewCustomer) {
-                    console.log("New customer detected — sending welcome message");
-                    await sendTextMessage(sender, WELCOME_MESSAGE);
-                    // Small delay so messages arrive in order
-                    await new Promise(resolve => setTimeout(resolve, 800));
-                }
-
                 // Check if customer is exclusively requesting to speak to a human
                 if (isRequestingHuman(text)) {
                     console.log(`[Handoff] Human contact request detected from ${sender}`);
-                    clearTimeout(timeout);
                     aiReply = HUMAN_HANDOFF_MESSAGE;
                 } else {
                     aiReply = await getAIReply(
@@ -212,7 +191,12 @@ app.post("/webhook", async (req, res) => {
                     );
                 }
 
-                clearTimeout(timeout);
+                // If new customer, prepend welcome message so it is sent as one single message bubble
+                let finalReply = aiReply;
+                if (isNewCustomer) {
+                    console.log("New customer detected — prepending welcome message");
+                    finalReply = `${WELCOME_MESSAGE}\n\n${aiReply}`;
+                }
 
                 const { error: dbError } = await supabase
                     .from("conversations")
@@ -225,7 +209,7 @@ app.post("/webhook", async (req, res) => {
                         {
                             phone_number: sender,
                             role: "assistant",
-                            message: aiReply
+                            message: finalReply
                         }
                     ]);
 
@@ -247,7 +231,7 @@ app.post("/webhook", async (req, res) => {
                         to: sender,
                         type: "text",
                         text: {
-                            body: aiReply
+                            body: finalReply
                         }
                     },
                     {
@@ -261,7 +245,6 @@ app.post("/webhook", async (req, res) => {
                 console.log("Reply sent");
 
             } catch (err) {
-                if (timeout) clearTimeout(timeout);
                 // Log full error details for debugging
                 console.error("=== AI REPLY ERROR ===");
                 console.error("Status:", err?.status || err?.response?.status);
@@ -453,7 +436,9 @@ YOUR TASKS:
 1. Warmly greet guests, representing Camp Mantap with a helpful, polite, professional, and matter-of-fact tone.
 2. Reply in the customer's language (Malay or English).
 3. If the customer states a preferred name during the conversation, remember it and address them by that name exclusively.
-4. **Booking Availability**: If the customer asks about booking slots, available dates, or site availability, you MUST check the "LIVE BOOKING AVAILABILITY" section first. Respond accurately using only the available sites, dates, and prices listed. If the customer asks for specific dates that are not shown in the live availability data, or if the live availability data is empty, politely explain that those dates are fully booked or unavailable, and guide them to check real-time availability or book via the official links.
+4. **Booking Availability**: If the customer asks about booking slots, available dates, or site availability, you MUST check the "LIVE BOOKING AVAILABILITY" section first:
+   - If the requested date(s) are listed as available, state that they are available and provide the details (site, price, etc.) listed. Do NOT state that they are unavailable or fully booked.
+   - If the requested date(s) are NOT listed in the live availability data, or if the live availability data is empty, politely explain that those specific dates are fully booked or unavailable, and guide them to check real-time availability or book via the official links.
 5. Answer other FAQs, rules, and campsite parameters using the Knowledge Base.
 6. If a question is not covered in the provided Knowledge Base or Availability Context, output EXACTLY our standard fallback message and refer them to Miss Jenny.
 
