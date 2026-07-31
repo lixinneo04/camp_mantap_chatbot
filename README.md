@@ -1,9 +1,6 @@
 # Camp Mantap — Booking & Assistant System Documentation
 
-Welcome to the official repository for **Camp Mantap** (located near Bentong, Pahang). This repository contains the complete ecosystem of tools designed to automate customer service, handle campsite FAQs via WhatsApp, and present real-time booking availability.
-
-The system connects a WhatsApp-based conversational AI chatbot and a client-side calendar dashboard to a shared **Supabase** database backend.
-
+Welcome to the official repository for **Camp Mantap** (located near Bentong, Pahang). This repository contains the complete ecosystem of tools designed to automate customer service, handle campsite FAQs via WhatsApp, and present booking availability.
 ---
 
 ## 1. System Architecture
@@ -26,8 +23,7 @@ sequenceDiagram
     rect rgb(240, 248, 255)
         Note over Srv, DB: Parallel Queries & UI Optimization
         alt Processing exceeds 500ms
-            Srv-->>WA: Sends status update ("⏳ Reading your request...")
-            WA-->>Customer: Displays status update
+            Srv-->>Customer: Displays status update
         end
         
         Srv->>DB: Fetch last 10 historical conversation messages
@@ -54,12 +50,6 @@ sequenceDiagram
 ## 2. Directory Structure
 
 ```text
-Camp_mantap/
-├── Availability_plugin/          # Frontend availability calendar
-│   ├── index.html                # UI Layout & embed instructions
-│   ├── app.js                    # UI orchestration and Supabase client
-│   └── styles.css                # Custom visual styling (light/dark-mode compatible)
-│
 ├── camp_mantap_chatbot/          # Backend WhatsApp Webhook & AI server
 │   ├── public/                   # Public static assets (privacy policy)
 │   ├── availability.js           # Live availability querying & schema auto-discovery
@@ -68,8 +58,7 @@ Camp_mantap/
 │   ├── package.json              # Node dependencies
 │   ├── README.md                 # Chatbot-specific developer pointers
 │   └── .env                      # Local environment configuration file (ignored)
-│
-└── view_conversations.js         # Root diagnostic utility to view conversations
+
 ```
 
 ---
@@ -98,7 +87,6 @@ Acts as the central entry point and handles HTTP routing, request filtering, con
 * **Webhook Verification (`GET /webhook`)**: Checks if the signature matches `VERIFY_TOKEN` and returns the `hub.challenge` to establish connection with Meta.
 * **Message Receipt Filtering**: Identifies and drops delivery/read status updates (`value.statuses`) to avoid redundant processing.
 * **Deduplication**: Remembers processed message IDs in a memory `Set` (`processedMessageIds`) and ignores duplicates. Cleanup occurs automatically after 5 minutes to prevent memory leaks.
-* **Latency Tolerant Feedback**: Installs a `setTimeout` that sends a loading message ("⏳ Reading your request...") if Gemini API call + DB lookup exceeds 500ms.
 * **History Management**: Pulls the last 10 messages from the `conversations` table in Supabase. Ensures the history sent to Gemini begins with a `user` role turn (cleaning any leading `model` role outputs).
 * **Welcome Engine**: Detects if a phone number has zero prior records. If true, delivers a predefined `WELCOME_MESSAGE` before generating the main response.
 * **Retry Loop**: Incorporates a 3-attempt retry sequence with a 2-second sleep duration specifically when Gemini throws a `503 Service Unavailable` error.
@@ -128,12 +116,6 @@ Dynamically reads live booking records from Supabase and translates database rec
 Acts as the static source of truth for campsite parameters verified by administration.
 * **Content Structure**: Contains all campsite rules, policies, schedules, locations, booking links, and facilities formatted in standard Markdown.
 * **System Prompt Injection**: Loaded once during server start-up and injected directly into the Gemini `systemInstruction` context. This removes the need for brittle keyword-matching algorithms, giving the AI model native comprehension over all policies.
-
-### 4.4. [Availability_plugin](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/Availability_plugin) (Client Dashboard)
-A standalone front-end client module containing:
-* **[index.html](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/Availability_plugin/index.html)**: Main dashboard page containing the interactive calendar grid, occupancy legends, and room booking details panels.
-* **[app.js](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/Availability_plugin/app.js)**: Orchestrates Supabase connectivity, manages month transitions, renders calendar states, and houses a mock booking generator supporting a fully functional **Demo Mode** if Supabase settings are absent.
-* **[styles.css](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/Availability_plugin/styles.css)**: Modern responsive CSS layout featuring customized Google Fonts (`Outfit`, `Plus Jakarta Sans`) and CSS custom properties (variables) for theme management.
 
 ---
 
@@ -253,76 +235,7 @@ The default prompt contains:
 * **WhatsApp-specific Formatting**: Constrains the AI to use lists starting with `- ` (never `* ` as bullets), wrap bold text with single asterisks (`*bold*`), avoid double asterisks (`**bold**`), and output well-spaced messages.
 
 ---
-
-## 7. Supabase Database Schema Setup
-
-To configure your Supabase backend to interact with the chatbot and availability calendar, run the following SQL scripts in your Supabase SQL Editor:
-
-### 7.1. Conversations Log Table
-Stores conversation histories to preserve chat context for Gemini.
-
-```sql
-CREATE TABLE conversations (
-    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    phone_number text NOT NULL,
-    role text NOT NULL, -- 'user' or 'assistant'
-    message text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
--- Index to fetch chat history quickly
-CREATE INDEX idx_conversations_phone_number ON conversations(phone_number);
-```
-
-### 7.2. Campsite Availability Schema (Example Setup)
-The chatbot and calendar look for a view named `view_availability` or `view_availability_public`. Here is a recommended layout representing stay dates and occupancy status:
-
-```sql
--- Source table containing status for each date and site
-CREATE TABLE campsite_availability (
-    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    stay_date date NOT NULL,
-    room_type text NOT NULL,                  -- e.g., 'Camp 1', 'Camp 2', etc.
-    status text NOT NULL DEFAULT 'AVAILABLE', -- 'AVAILABLE' or 'BOOKED'
-    customer_name text,
-    check_in date,
-    check_out date,
-    price numeric DEFAULT 80.00,
-    capacity integer DEFAULT 4,
-    notes text
-);
-
--- Public availability view (used by chatbot and public plugins)
-CREATE OR REPLACE VIEW view_availability_public AS
-SELECT 
-    stay_date,
-    to_char(stay_date, 'FMDay') AS day_of_week,
-    room_type,
-    status,
-    price,
-    capacity,
-    notes
-FROM campsite_availability;
-
--- Administrative availability view (includes customer details)
-CREATE OR REPLACE VIEW view_availability AS
-SELECT 
-    stay_date,
-    to_char(stay_date, 'FMDay') AS day_of_week,
-    room_type,
-    status,
-    customer_name,
-    check_in,
-    check_out,
-    price,
-    capacity,
-    notes
-FROM campsite_availability;
-```
-
----
-
-## 8. Local Setup & Running
+## 7. Local Setup & Running
 
 Follow these steps to run the chatbot server locally:
 
@@ -346,7 +259,7 @@ Follow these steps to run the chatbot server locally:
 
 ---
 
-## 9. Webhook Tunneling via Ngrok
+## 8. Webhook Tunneling via Ngrok
 
 Since Meta's WhatsApp Cloud API requires an HTTPS callback URL to deliver message webhooks, establish a local secure tunnel:
 
@@ -365,15 +278,3 @@ Since Meta's WhatsApp Cloud API requires an HTTPS callback URL to deliver messag
    - **Verify Token**: Enter the exact same value as your `VERIFY_TOKEN` in your `.env` file.
    - Click **Verify and save**.
    - Under **Webhook fields**, click **Manage** and subscribe to **messages**.
-
----
-
-## 10. Testing & Debugging Conversations
-
-You can query the saved conversations database to verify that logging works correctly:
-1. Make sure you have your `.env` variables set up correctly in `camp_mantap_chatbot/.env`.
-2. From the root directory, run the diagnostic script:
-   ```bash
-   node view_conversations.js
-   ```
-   This script loads the credentials directly from the chatbot subdirectory and outputs the last 10 messages from the database.
