@@ -49,6 +49,28 @@ const HUMAN_HANDOFF_MESSAGE = `Sure! You can reach our person-in-charge, *Miss J
 She will be happy to assist you further. 😊`;
 
 // ---------------------------------------------------------------------------
+// Detect when customer is asking to see campsite images / photos
+// ---------------------------------------------------------------------------
+function isRequestingImages(text) {
+    const lower = text.toLowerCase();
+    const patterns = [
+        // English
+        /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery|campsite\s+photos?)\b/i,
+        /\b(images?|photos?|pictures?|pics?)\s+(of|for)\s+(the\s+)?(camp(site)?|camp\s*mantap|site[s]?)\b/i,
+        /\bany\s+(photos?|images?|pictures?|pics?)\b/i,
+        /\bwhat\s+does\s+(the\s+)?(camp(site)?|it)\s+look\s+like\b/i,
+        /\bcan\s+i\s+see\s+(the\s+)?(photos?|images?|pictures?|camp(site)?)\b/i,
+        /\b(camp(site)?\s+)?(photos?|images?|pictures?|gallery)\b/i,
+        // Malay
+        /\b(tunjuk|hantar|share|lihat|tengok)\s+(gambar|foto|imej)\b/i,
+        /\bgambar\s+(tapak|kemah|camp(mantap)?|kawasan)\b/i,
+        /\b(ada\s+)?(gambar|foto|imej)\s+(tak|ke|x)?\b/i,
+        /\b(macam\s+mana|macamana)\s+(rupa\s+)?(tapak|camp|kemah)\b/i,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
+// ---------------------------------------------------------------------------
 // Detect when customer exclusively wants to speak to a human / Miss Jenny
 // ---------------------------------------------------------------------------
 function isRequestingHuman(text) {
@@ -84,6 +106,9 @@ const app = express();                  // ← app created here, BEFORE routes
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
 
 app.use(express.json());
+
+// Serve static files (images, etc.) from the public folder
+app.use(express.static(path.join(__dirname, 'public')));
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
@@ -177,6 +202,14 @@ app.post("/webhook", async (req, res) => {
                 ]);
 
                 const isNewCustomer = existingHistory.length === 0;
+
+                // Check if customer is asking for campsite images
+                if (isRequestingImages(text)) {
+                    console.log(`[Images] Image request detected from ${sender}`);
+                    await sendCampsiteImages(sender);
+                    // Return early — images already sent, no text reply needed
+                    return res.sendStatus(200);
+                }
 
                 // Check if customer is exclusively requesting to speak to a human
                 if (isRequestingHuman(text)) {
@@ -357,6 +390,67 @@ async function sendTextMessage(to, body) {
             }
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// Send a single image via WhatsApp
+// ---------------------------------------------------------------------------
+async function sendImageMessage(to, imageUrl, caption = "") {
+    await axios.post(
+        `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to,
+            type: "image",
+            image: {
+                link: imageUrl,
+                caption
+            }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Send all campsite images to the customer
+// ---------------------------------------------------------------------------
+async function sendCampsiteImages(to) {
+    const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const imagesDir = path.join(__dirname, 'public', 'images');
+
+    // Read all image files from the images directory
+    const allFiles = fs.readdirSync(imagesDir);
+    const imageFiles = allFiles.filter(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
+
+    if (imageFiles.length === 0) {
+        console.log('[Images] No image files found in public/images');
+        await sendTextMessage(to, "Sorry, no campsite images are available at the moment. 😔\nPlease contact Miss Jenny for more details:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789");
+        return;
+    }
+
+    // Send an intro text first
+    await sendTextMessage(to, `Here are our campsite photos at Camp Mantap! 📸🏕️\n\nTotal: ${imageFiles.length} photos`);
+
+    // Send each image with a small delay to avoid rate limits
+    for (let i = 0; i < imageFiles.length; i++) {
+        const filename = imageFiles[i];
+        const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+        // Use the filename (without extension) as a caption
+        const caption = filename.replace(/\.[^.]+$/, '');
+        console.log(`[Images] Sending image ${i + 1}/${imageFiles.length}: ${filename}`);
+        await sendImageMessage(to, imageUrl, caption);
+        // Small delay between images to avoid WhatsApp rate limits
+        if (i < imageFiles.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+
+    console.log(`[Images] All ${imageFiles.length} campsite images sent to ${to}`);
 }
 
 // ---------------------------------------------------------------------------

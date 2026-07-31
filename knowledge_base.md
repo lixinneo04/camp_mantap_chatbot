@@ -81,3 +81,12 @@ Ada kemudahan:
 To make a booking at Camp Mantap, check availability and book through our official online platforms:
 - BookTapak: https://booktapak.com/property/campmantap?locale=en
 - Escabee: https://escabee.com/campsites/camp-mantap
+
+## Campsite Photos & Gallery
+We have photos of our campsites available! Customers can request to see them by asking:
+- "Can I see photos of the campsite?"
+- "Show me images of Camp Mantap"
+- "Tunjuk gambar tapak"
+- "Ada gambar tak?"
+
+We have photos for Camp A, Camp B, Camp C, and Camp D. If a customer asks to see images or photos, let them know they can just say "show me the campsite photos" and the bot will send them directly.
