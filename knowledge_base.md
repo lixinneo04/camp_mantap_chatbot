@@ -77,6 +77,39 @@ Ada kemudahan:
 - We cannot predict natural conditions perfectly, so we have installed a warning siren system and monitor the river closely when it rains, even in the early hours.
 - Semasa hujan lebat, paras air akan meningkat dengan ketara dan kami telah melihat paras tertinggi iaitu 7 kaki. Perkarangan kami berada pada 10 kaki di atas dan setakat ini kami tidak menemui air melimpah ke kawasan kami.
 
+## Campsite Categories & Pricelist
+We offer three categories of campsites (Standard, Medium, and Family) based on size and capacity:
+
+### Standard
+- Campsites: Camp 2, Camp 3
+- Camp Size: 7m x 10m
+- Pax Included in Price: 4 Pax
+- Max Pax: 6 Pax
+- Max Vehicles: 2
+- Pricing: RM 100 / night
+
+### Medium
+- Campsites: Camp 4, Camp 6, Camp 7, Camp 8, Camp 9
+- Camp Size: 8m x 11m
+- Pax Included in Price: 6 Pax
+- Max Pax: 8 Pax
+- Max Vehicles: 2
+- Pricing: RM 130 / night
+
+### Family
+- Campsites: Camp 1, Camp 5
+- Camp Size: 10m x 13m
+- Pax Included in Price: 8 Pax
+- Max Pax: 10 Pax
+- Max Vehicles: 3
+- Pricing: RM 160 / night
+
+### Additional Pricelist Rules & Information
+- Additional Pax Charges: RM 50 / Pax
+- Infants (4 years old & below): FOC (Free of Charge)
+- Tents in the pictures/gallery are for illustration purposes and size comparison only. Campers must bring their own tents unless renting a tent package.
+- Camp Mantap reserves the right to alter and change any of the information stated here without prior notice.
+
 ## Booking & Registration
 To make a booking at Camp Mantap, check availability and book through our official online platforms:
 - BookTapak: https://booktapak.com/property/campmantap?locale=en

@@ -51,14 +51,15 @@ sequenceDiagram
 
 ```text
 ├── camp_mantap_chatbot/          # Backend WhatsApp Webhook & AI server
-│   ├── public/                   # Public static assets (privacy policy)
+│   ├── public/                   # Public static assets (privacy policy, images)
+│   │   ├── images/               # Campsite and tent rental image files
+│   │   └── privacy-policy.html   # Privacy policy page
 │   ├── availability.js           # Live availability querying & schema auto-discovery
 │   ├── server.js                 # Express orchestration & Gemini integration
 │   ├── knowledge_base.md         # Campsite rules, policies, and pricing (FAQ source)
 │   ├── package.json              # Node dependencies
 │   ├── README.md                 # Chatbot-specific developer pointers
 │   └── .env                      # Local environment configuration file (ignored)
-
 ```
 
 ---
@@ -91,6 +92,7 @@ Acts as the central entry point and handles HTTP routing, request filtering, con
 * **Welcome Engine**: Detects if a phone number has zero prior records. If true, delivers a predefined `WELCOME_MESSAGE` before generating the main response.
 * **Retry Loop**: Incorporates a 3-attempt retry sequence with a 2-second sleep duration specifically when Gemini throws a `503 Service Unavailable` error.
 * **Fallback Resolution**: If any uncaught error interrupts the execution, sends a fallback message directing the user to Miss Jenny directly: `+60 12-345 6789`.
+* **Direct Image & Detail Sheet Sending**: Intercepts requests for campsite photos or tent package details using regex patterns (defined in `isRequestingImages` and `isRequestingTentDetails`) and sends the relevant image attachments directly via the WhatsApp Business API (using `sendCampsiteImages` and `sendTentDetailsImages`) with a short 500ms delay to prevent rate-limiting, bypassing Gemini entirely.
 
 ### 4.2. [availability.js](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot/availability.js) (Live Availability Agent)
 Dynamically reads live booking records from Supabase and translates database records into natural context.
@@ -148,6 +150,10 @@ The sequence of operations when a webhook is triggered:
                 ▼ (Sync execution)                      ▼ (Async timer)
       [Get Conversation History]                     [500ms Expired?]
                 │                                       │
+      [Requesting Campsite Photos?] ── Yes ──► [Send Images] ──► [Send HTTP 200] (End)
+                │ No                                    │
+      [Requesting Tent Details?] ───── Yes ──► [Send Sheets] ──► [Send HTTP 200] (End)
+                │ No                                    │
       [Is history empty (New Customer)?]                 ├── No ──► [Do nothing]
                 │                                       │
                 ├─────── Yes ──► [Send Welcome Message] │
