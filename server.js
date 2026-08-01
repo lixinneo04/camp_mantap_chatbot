@@ -78,7 +78,17 @@ function getRequestedImageType(text) {
         return 'tent';
     }
 
-    // 3. Campsite picture (with "Tapak")
+    // 3. ATV Ride / ATV car (e.g., "atv", "atv ride", "atv tour", "atv car", "gambar atv")
+    const atvPatterns = [
+        /\batv\b/i,
+        /\bgambar\s+atv\b/i,
+        /\b(atv\s+(ride|tour|car|price|photo|image|picture|detail|pic|foto)s?)\b/i
+    ];
+    if (atvPatterns.some(p => p.test(lower))) {
+        return 'atv';
+    }
+
+    // 4. Campsite picture (with "Tapak")
     // Match "campsite picture", "campsite photo", "gambar tapak", "tunjuk tapak"
     const campsitePatterns = [
         /\b(campsite)\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
@@ -490,7 +500,7 @@ async function handleImageRequest(to, type) {
         } else {
             await sendTextMessage(to, "Sorry, the campsite pricelist poster is currently unavailable. 😔\nMaaf, poster senarai harga tapak tidak tersedia buat masa ini.");
         }
-    } 
+    }
     else if (type === 'tent') {
         const detailSheets = [
             { file: 'Tent Rent @ Style A.jpeg', caption: '🏕️ *Sewa Khemah Style A / Tent Rental Style A*\nPayung Village L | Max 4 pax\n1 malam: RM250 (1-2 org) / RM300 (3-4 org)\nMalam tambahan: RM200 (1-2 org) / RM250 (3-4 org)' },
@@ -518,7 +528,30 @@ async function handleImageRequest(to, type) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
-    } 
+    }
+    else if (type === 'atv') {
+        const atvFiles = imageFiles.filter(f => /atv/i.test(f));
+        if (atvFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no ATV photos are available at the moment. 😔\nMaaf, tiada gambar ATV disediakan buat masa ini.");
+            return;
+        }
+
+        await sendTextMessage(to,
+            `Here are our ATV car photos! 🏍️🏕️\nBerikut adalah foto kenderaan ATV kami! 🏍️🏕️\n\n` +
+            `Total: ${atvFiles.length} photos / foto`
+        );
+
+        for (let i = 0; i < atvFiles.length; i++) {
+            const filename = atvFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            const caption = filename.replace(/\.[^.]+$/, '');
+            console.log(`[Images] Sending ATV photo ${i + 1}/${atvFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, caption);
+            if (i < atvFiles.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    }
     else if (type === 'campsite') {
         const tapakFiles = imageFiles.filter(f => /Tapak/i.test(f));
         if (tapakFiles.length === 0) {
@@ -526,7 +559,7 @@ async function handleImageRequest(to, type) {
             return;
         }
 
-        await sendTextMessage(to, 
+        await sendTextMessage(to,
             `Here are our campsite photos (Tapak)! 📸🏕️\nBerikut adalah foto tapak perkhemahan kami! 📸🏕️\n\n` +
             `Total: ${tapakFiles.length} photos / foto`
         );
@@ -541,7 +574,7 @@ async function handleImageRequest(to, type) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
-    } 
+    }
     else if (type === 'camp') {
         const campFiles = imageFiles.filter(f => f.toLowerCase().startsWith('camp ') && !f.toLowerCase().includes('pricelist'));
         if (campFiles.length === 0) {
@@ -549,7 +582,7 @@ async function handleImageRequest(to, type) {
             return;
         }
 
-        await sendTextMessage(to, 
+        await sendTextMessage(to,
             `Here are our camp photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
             `Total: ${campFiles.length} photos / foto`
         );
