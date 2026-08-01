@@ -49,55 +49,71 @@ const HUMAN_HANDOFF_MESSAGE = `Sure! You can reach our person-in-charge, *Miss J
 She will be happy to assist you further. 😊`;
 
 // ---------------------------------------------------------------------------
-// Detect when customer is asking to see campsite images / photos
+// Route incoming image requests to the correct categories
 // ---------------------------------------------------------------------------
-function isRequestingImages(text) {
+function getRequestedImageType(text) {
     const lower = text.toLowerCase();
-    const patterns = [
-        // English
-        /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery|campsite\s+photos?)\b/i,
-        /\b(images?|photos?|pictures?|pics?)\s+(of|for)\s+(the\s+)?(camp(site)?|camp\s*mantap|site[s]?)\b/i,
-        /\bany\s+(photos?|images?|pictures?|pics?)\b/i,
-        /\bwhat\s+does\s+(the\s+)?(camp(site)?|it)\s+look\s+like\b/i,
-        /\bcan\s+i\s+see\s+(the\s+)?(photos?|images?|pictures?|camp(site)?)\b/i,
-        /\b(camp(site)?\s+)?(photos?|images?|pictures?|gallery)\b/i,
-        // Malay
-        /\b(tunjuk|hantar|share|lihat|tengok)\s+(gambar|foto|imej)\b/i,
-        /\bgambar\s+(tapak|kemah|camp(mantap)?|kawasan)\b/i,
-        /\b(ada\s+)?(gambar|foto|imej)\s+(tak|ke|x)?\b/i,
-        /\b(macam\s+mana|macamana)\s+(rupa\s+)?(tapak|camp|kemah)\b/i,
-    ];
-    return patterns.some(p => p.test(lower));
-}
 
-// ---------------------------------------------------------------------------
-// Detect when customer is asking about tent types, packages, prices, or facilities
-// ---------------------------------------------------------------------------
-function isRequestingTentDetails(text) {
-    const lower = text.toLowerCase();
-    const patterns = [
-        // English — price / cost / rate
-        /\b(how\s+much|what('?s|\s+is)\s+the\s+)?(price|cost|rate|fee|charge|pricing)\b/i,
-        /\b(tent|package|plan|option)s?\s+(type|style|detail|info|option|price|cost|available)s?\b/i,
-        /\bwhat\s+(type|kind|style)s?\s+of\s+(tent|package|camp)s?\b/i,
-        /\b(show|tell|send)\s+(me\s+)?(the\s+)?(package|tent|style|pricing|detail)s?\b/i,
-        /\b(style\s+[abc]|type\s+[abc])\b/i,
-        /\bwhat\s+do\s+(you|we)\s+(provide|offer|have|include)\b/i,
-        /\bfacilities?\s+(include|provided|available|offer)\b/i,
-        /\bwhat'?s?\s+included\b/i,
-        /\b(tent|khemah)\s+(rental|rent|sewa|hire)s?\b/i,
-        /\bsewa\s+khemah\b/i,
-        // Malay — harga / pakej / kemudahan
-        /\b(berapa|harga|kos|bayaran|kadar)\b/i,
-        /\b(pakej|package|pakej\s+sewa)\b/i,
-        /\b(jenis|pilihan|tawaran)\s+(khemah|kemah|tent)\b/i,
-        /\bkemudahan\s+(disediakan|yang\s+ada|tersedia)\b/i,
-        /\bapa\s+(yang\s+)?(disediakan|ada|termasuk|include)\b/i,
-        /\b(style|gaya)\s+[abc]\b/i,
-        /\bberapa\s+harga\b/i,
-        /\bharga\s+(sewa|semalam|malam)\b/i,
+    // 1. Pricelist / Poster (e.g., "pricelist image", "poster", "campsite pricelist", "gambar pricelist", "gambar poster")
+    const pricelistPatterns = [
+        /\bpricelist\b/i,
+        /\bprice\s*list\b/i,
+        /\bposter\b/i,
+        /\bgambar\s+(harga|pricelist|price\s*list|yuran|kadar|poster)\b/i,
+        /\b(campsite\s+pricelist|campsite\s+price\s+list)\b/i
     ];
-    return patterns.some(p => p.test(lower));
+    if (pricelistPatterns.some(p => p.test(lower))) {
+        return 'pricelist';
+    }
+
+    // 2. Tent rent / Khemah rent (e.g., "tent rent", "sewa khemah", "tent package", "tent photo", "gambar khemah")
+    const tentPatterns = [
+        /\bsewa\s+khemah\b/i,
+        /\bsewa\s+kemah\b/i,
+        /\btent\s+(rent|pricing|price|rate|package|photo|image|picture)s?\b/i,
+        /\b(khemah|kemah|tent)\s+(sewa|pakej|harga|gambar|foto)s?\b/i,
+        /\b(rent|sewa)\s+(tent|khemah|kemah)s?\b/i
+    ];
+    if (tentPatterns.some(p => p.test(lower))) {
+        return 'tent';
+    }
+
+    // 3. Campsite picture (with "Tapak")
+    // Match "campsite picture", "campsite photo", "gambar tapak", "tunjuk tapak"
+    const campsitePatterns = [
+        /\b(campsite)\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
+        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?(campsite)\b/i,
+        /\bgambar\s+(tapak|campsite)\b/i,
+        /\b(tunjuk|lihat|tengok)\s+(tapak|campsite)\b/i,
+        /\btapak\b/i
+    ];
+    if (campsitePatterns.some(p => p.test(lower))) {
+        return 'campsite';
+    }
+
+    // 4. Camp picture (with "Camp A/B/C/D")
+    // Match "camp picture", "camp photo", "gambar camp", "tunjuk camp"
+    const campPatterns = [
+        /\bcamp\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
+        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?(camp)\b/i,
+        /\bgambar\s+camp\b/i,
+        /\b(tunjuk|lihat|tengok)\s+camp\b/i
+    ];
+    if (campPatterns.some(p => p.test(lower))) {
+        return 'camp';
+    }
+
+    // Generic fallback for any photo/image/picture/gallery/photo request
+    const genericImagePatterns = [
+        /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery)\b/i,
+        /\b(images?|photos?|pictures?|pics?|gallery)\b/i,
+        /\b(gambar|foto|imej)\b/i
+    ];
+    if (genericImagePatterns.some(p => p.test(lower))) {
+        return 'campsite';
+    }
+
+    return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,19 +249,12 @@ app.post("/webhook", async (req, res) => {
 
                 const isNewCustomer = existingHistory.length === 0;
 
-                // Check if customer is asking for campsite images / gallery
-                if (isRequestingImages(text)) {
-                    console.log(`[Images] Image request detected from ${sender}`);
-                    await sendCampsiteImages(sender);
+                // Route image/pricing requests dynamically
+                const requestedImageType = getRequestedImageType(text);
+                if (requestedImageType) {
+                    console.log(`[Images] Image request detected from ${sender} (Type: ${requestedImageType})`);
+                    await handleImageRequest(sender, requestedImageType);
                     // Return early — images already sent, no text reply needed
-                    return res.sendStatus(200);
-                }
-
-                // Check if customer is asking about tent types, pricing, or package details
-                if (isRequestingTentDetails(text)) {
-                    console.log(`[TentDetails] Pricing/package request detected from ${sender}`);
-                    await sendTentDetailsImages(sender);
-                    // Return early — detail sheets already sent
                     return res.sendStatus(200);
                 }
 
@@ -455,9 +464,9 @@ async function sendImageMessage(to, imageUrl, caption = "") {
 }
 
 // ---------------------------------------------------------------------------
-// Send all campsite images to the customer
+// Handle categorized image requests (English & Malay)
 // ---------------------------------------------------------------------------
-async function sendCampsiteImages(to) {
+async function handleImageRequest(to, type) {
     const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
     const imagesDir = path.join(__dirname, 'public', 'images');
 
@@ -467,74 +476,95 @@ async function sendCampsiteImages(to) {
 
     if (imageFiles.length === 0) {
         console.log('[Images] No image files found in public/images');
-        await sendTextMessage(to, "Sorry, no campsite images are available at the moment. 😔\nPlease contact Miss Jenny for more details:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789");
+        await sendTextMessage(to, "Sorry, no images are available at the moment. 😔\nSila hubungi Miss Jenny untuk maklumat lanjut:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789");
         return;
     }
 
-    // Send an intro text first
-    await sendTextMessage(to, `Here are our campsite photos at Camp Mantap! 📸🏕️\n\nTotal: ${imageFiles.length} photos`);
+    if (type === 'pricelist') {
+        const file = imageFiles.find(f => /Campsite Pricelist/i.test(f));
+        if (file) {
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
+            const caption = `Here is our campsite pricelist poster! 🏕️💵\nBerikut adalah poster senarai harga tapak kami! 🏕️💵`;
+            console.log(`[Images] Sending pricelist poster: ${file}`);
+            await sendImageMessage(to, imageUrl, caption);
+        } else {
+            await sendTextMessage(to, "Sorry, the campsite pricelist poster is currently unavailable. 😔\nMaaf, poster senarai harga tapak tidak tersedia buat masa ini.");
+        }
+    } 
+    else if (type === 'tent') {
+        const detailSheets = [
+            { file: 'Tent Rent @ Style A.jpeg', caption: '🏕️ *Sewa Khemah Style A / Tent Rental Style A*\nPayung Village L | Max 4 pax\n1 malam: RM250 (1-2 org) / RM300 (3-4 org)\nMalam tambahan: RM200 (1-2 org) / RM250 (3-4 org)' },
+            { file: 'Tent Rent @ Style B.jpeg', caption: '🏕️ *Sewa Khemah Style B / Tent Rental Style B*\nPayung Village T (XL) | Max 8 pax\n1 malam: RM350 (1-4 org) / RM400 (5-8 org)\nMalam tambahan: RM300 (1-4 org) / RM350 (5-8 org)' },
+            { file: 'Tent Rent @ Style C.jpeg', caption: '🏕️ *Sewa Khemah Style C / Tent Rental Style C*\nDome Style | Max 8 pax\n1 malam: RM400 (1-4 org) / RM500 (5-8 org)\nMalam tambahan: RM350 (1-4 org) / RM450 (5-8 org)' },
+        ];
 
-    // Send each image with a small delay to avoid rate limits
-    for (let i = 0; i < imageFiles.length; i++) {
-        const filename = imageFiles[i];
-        const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-        // Use the filename (without extension) as a caption
-        const caption = filename.replace(/\.[^.]+$/, '');
-        console.log(`[Images] Sending image ${i + 1}/${imageFiles.length}: ${filename}`);
-        await sendImageMessage(to, imageUrl, caption);
-        // Small delay between images to avoid WhatsApp rate limits
-        if (i < imageFiles.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500));
+        await sendTextMessage(to,
+            `Here are our tent rental packages! 🏕️\nBerikut adalah pakej sewa khemah kami! 🏕️\n\n` +
+            `All packages include / Semua pakej termasuk:\n` +
+            `- Air Mattress or Foam / Tilam Angin atau Tilam Foam\n` +
+            `- Foam Pillows / Bantal Foam\n` +
+            `- Fan & Light / Kipas & Lampu\n` +
+            `- Table & Chairs / Meja & Kerusi\n\n` +
+            `*Note: Price does not include campsite fee (tapak)*\n` +
+            `*Nota: Harga tidak termasuk caj tapak perkhemahan*`
+        );
+
+        for (let i = 0; i < detailSheets.length; i++) {
+            const { file, caption } = detailSheets[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
+            console.log(`[Images] Sending tent rental sheet ${i + 1}/${detailSheets.length}: ${file}`);
+            await sendImageMessage(to, imageUrl, caption);
+            if (i < detailSheets.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    } 
+    else if (type === 'campsite') {
+        const tapakFiles = imageFiles.filter(f => /Tapak/i.test(f));
+        if (tapakFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no campsite tapak photos are available at the moment. 😔\nMaaf, tiada gambar tapak perkhemahan disediakan buat masa ini.");
+            return;
+        }
+
+        await sendTextMessage(to, 
+            `Here are our campsite photos (Tapak)! 📸🏕️\nBerikut adalah foto tapak perkhemahan kami! 📸🏕️\n\n` +
+            `Total: ${tapakFiles.length} photos / foto`
+        );
+
+        for (let i = 0; i < tapakFiles.length; i++) {
+            const filename = tapakFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            const caption = filename.replace(/\.[^.]+$/, '');
+            console.log(`[Images] Sending campsite photo ${i + 1}/${tapakFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, caption);
+            if (i < tapakFiles.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    } 
+    else if (type === 'camp') {
+        const campFiles = imageFiles.filter(f => f.toLowerCase().startsWith('camp ') && !f.toLowerCase().includes('pricelist'));
+        if (campFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no camp layout photos are available at the moment. 😔\nMaaf, tiada gambar kawasan perkhemahan (Camp) disediakan buat masa ini.");
+            return;
+        }
+
+        await sendTextMessage(to, 
+            `Here are our camp photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
+            `Total: ${campFiles.length} photos / foto`
+        );
+
+        for (let i = 0; i < campFiles.length; i++) {
+            const filename = campFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            const caption = filename.replace(/\.[^.]+$/, '');
+            console.log(`[Images] Sending camp photo ${i + 1}/${campFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, caption);
+            if (i < campFiles.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
         }
     }
-
-    console.log(`[Images] All ${imageFiles.length} campsite images sent to ${to}`);
-}
-
-// ---------------------------------------------------------------------------
-// Send tent rental detail sheets (Style A, B, C) — pricing & facilities
-// ---------------------------------------------------------------------------
-async function sendTentDetailsImages(to) {
-    const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
-
-    // Ordered list of detail sheet filenames and their captions
-    const detailSheets = [
-        { file: 'Tent Rent @ Style A.jpeg', caption: '🏕️ *Sewa Khemah Style A*\nPayung Village L | Max 4 pax\n1 malam: RM250 (1-2 org) / RM300 (3-4 org)\nMalam tambahan: RM200 (1-2 org) / RM250 (3-4 org)' },
-        { file: 'Tent Rent @ Style B.jpeg', caption: '🏕️ *Sewa Khemah Style B*\nPayung Village T (XL) | Max 8 pax\n1 malam: RM350 (1-4 org) / RM400 (5-8 org)\nMalam tambahan: RM300 (1-4 org) / RM350 (5-8 org)' },
-        { file: 'Tent Rent @ Style C.jpeg', caption: '🏕️ *Sewa Khemah Style C*\nDome Style | Max 8 pax\n1 malam: RM400 (1-4 org) / RM500 (5-8 org)\nMalam tambahan: RM350 (1-4 org) / RM450 (5-8 org)' },
-    ];
-
-    // Send intro text first
-    await sendTextMessage(to,
-        `Here are our tent rental packages at Camp Mantap! 🏕️\n\n` +
-        `All packages include:\n` +
-        `- Air Mattress / Foam\n` +
-        `- Foam Pillows\n` +
-        `- Fan & Light\n` +
-        `- Table & Chairs\n\n` +
-        `*Note: Price does not include campsite fee (tapak)*`
-    );
-
-    // Send each detail sheet with a short delay
-    for (let i = 0; i < detailSheets.length; i++) {
-        const { file, caption } = detailSheets[i];
-        const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
-        console.log(`[TentDetails] Sending sheet ${i + 1}/${detailSheets.length}: ${file}`);
-        await sendImageMessage(to, imageUrl, caption);
-        if (i < detailSheets.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-    }
-
-    // Footer — point to booking links
-    await sendTextMessage(to,
-        `To book, check availability here:\n` +
-        `- BookTapak: https://booktapak.com/property/campmantap?locale=en\n` +
-        `- Escabee: https://escabee.com/campsites/camp-mantap\n\n` +
-        `Need more help? Feel free to ask! 😊`
-    );
-
-    console.log(`[TentDetails] All detail sheets sent to ${to}`);
 }
 
 // ---------------------------------------------------------------------------
