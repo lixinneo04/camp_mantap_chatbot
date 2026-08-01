@@ -82,11 +82,37 @@ To make a booking at Camp Mantap, check availability and book through our offici
 - BookTapak: https://booktapak.com/property/campmantap?locale=en
 - Escabee: https://escabee.com/campsites/camp-mantap
 
-## Campsite Photos & Gallery
-We have photos of our campsites available! Customers can request to see them by asking:
-- "Can I see photos of the campsite?"
-- "Show me images of Camp Mantap"
-- "Tunjuk gambar tapak"
-- "Ada gambar tak?"
+## Tent Rental Packages (Sewa Khemah)
+We offer 3 tent rental styles. Price does NOT include the campsite/tapak fee.
+All styles include: Air Mattress / Foam, Foam Pillows, Fan & Light, Table & Chairs (Meja & Kerusi). Utensils are NOT included.
 
-We have photos for Camp A, Camp B, Camp C, and Camp D. If a customer asks to see images or photos, let them know they can just say "show me the campsite photos" and the bot will send them directly.
+### Style A — Payung Village L
+- Max pax: 4 people
+- Harga 1 Malam:
+  - 1-2 orang: RM 250.00
+  - 3-4 orang: RM 300.00
+- Harga Malam Tambahan:
+  - 1-2 orang: RM 200.00
+  - 3-4 orang: RM 250.00
+
+### Style B — Payung Village T (XL)
+- Max pax: 8 people
+- Harga 1 Malam:
+  - 1-4 orang: RM 350.00
+  - 5-8 orang: RM 400.00
+- Harga Malam Tambahan:
+  - 1-4 orang: RM 300.00
+  - 5-8 orang: RM 350.00
+
+### Style C — Dome Style
+- Max pax: 8 people
+- Harga 1 Malam:
+  - 1-4 orang: RM 400.00
+  - 5-8 orang: RM 500.00
+- Harga Malam Tambahan:
+  - 1-4 orang: RM 350.00
+  - 5-8 orang: RM 450.00
+
+## Campsite Photos & Gallery
+We have photos of our campsites and tent package details available! If a customer asks to see campsite photos/images, or asks about tent types/prices/packages/facilities, the bot will automatically send them the relevant images directly. Just let customers know they can ask for photos or pricing info anytime.
+

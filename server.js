@@ -71,6 +71,36 @@ function isRequestingImages(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Detect when customer is asking about tent types, packages, prices, or facilities
+// ---------------------------------------------------------------------------
+function isRequestingTentDetails(text) {
+    const lower = text.toLowerCase();
+    const patterns = [
+        // English — price / cost / rate
+        /\b(how\s+much|what('?s|\s+is)\s+the\s+)?(price|cost|rate|fee|charge|pricing)\b/i,
+        /\b(tent|package|plan|option)s?\s+(type|style|detail|info|option|price|cost|available)s?\b/i,
+        /\bwhat\s+(type|kind|style)s?\s+of\s+(tent|package|camp)s?\b/i,
+        /\b(show|tell|send)\s+(me\s+)?(the\s+)?(package|tent|style|pricing|detail)s?\b/i,
+        /\b(style\s+[abc]|type\s+[abc])\b/i,
+        /\bwhat\s+do\s+(you|we)\s+(provide|offer|have|include)\b/i,
+        /\bfacilities?\s+(include|provided|available|offer)\b/i,
+        /\bwhat'?s?\s+included\b/i,
+        /\b(tent|khemah)\s+(rental|rent|sewa|hire)s?\b/i,
+        /\bsewa\s+khemah\b/i,
+        // Malay — harga / pakej / kemudahan
+        /\b(berapa|harga|kos|bayaran|kadar)\b/i,
+        /\b(pakej|package|pakej\s+sewa)\b/i,
+        /\b(jenis|pilihan|tawaran)\s+(khemah|kemah|tent)\b/i,
+        /\bkemudahan\s+(disediakan|yang\s+ada|tersedia)\b/i,
+        /\bapa\s+(yang\s+)?(disediakan|ada|termasuk|include)\b/i,
+        /\b(style|gaya)\s+[abc]\b/i,
+        /\bberapa\s+harga\b/i,
+        /\bharga\s+(sewa|semalam|malam)\b/i,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
+// ---------------------------------------------------------------------------
 // Detect when customer exclusively wants to speak to a human / Miss Jenny
 // ---------------------------------------------------------------------------
 function isRequestingHuman(text) {
@@ -203,11 +233,19 @@ app.post("/webhook", async (req, res) => {
 
                 const isNewCustomer = existingHistory.length === 0;
 
-                // Check if customer is asking for campsite images
+                // Check if customer is asking for campsite images / gallery
                 if (isRequestingImages(text)) {
                     console.log(`[Images] Image request detected from ${sender}`);
                     await sendCampsiteImages(sender);
                     // Return early — images already sent, no text reply needed
+                    return res.sendStatus(200);
+                }
+
+                // Check if customer is asking about tent types, pricing, or package details
+                if (isRequestingTentDetails(text)) {
+                    console.log(`[TentDetails] Pricing/package request detected from ${sender}`);
+                    await sendTentDetailsImages(sender);
+                    // Return early — detail sheets already sent
                     return res.sendStatus(200);
                 }
 
@@ -451,6 +489,52 @@ async function sendCampsiteImages(to) {
     }
 
     console.log(`[Images] All ${imageFiles.length} campsite images sent to ${to}`);
+}
+
+// ---------------------------------------------------------------------------
+// Send tent rental detail sheets (Style A, B, C) — pricing & facilities
+// ---------------------------------------------------------------------------
+async function sendTentDetailsImages(to) {
+    const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+    // Ordered list of detail sheet filenames and their captions
+    const detailSheets = [
+        { file: 'Tent Rent @ Style A.jpeg', caption: '🏕️ *Sewa Khemah Style A*\nPayung Village L | Max 4 pax\n1 malam: RM250 (1-2 org) / RM300 (3-4 org)\nMalam tambahan: RM200 (1-2 org) / RM250 (3-4 org)' },
+        { file: 'Tent Rent @ Style B.jpeg', caption: '🏕️ *Sewa Khemah Style B*\nPayung Village T (XL) | Max 8 pax\n1 malam: RM350 (1-4 org) / RM400 (5-8 org)\nMalam tambahan: RM300 (1-4 org) / RM350 (5-8 org)' },
+        { file: 'Tent Rent @ Style C.jpeg', caption: '🏕️ *Sewa Khemah Style C*\nDome Style | Max 8 pax\n1 malam: RM400 (1-4 org) / RM500 (5-8 org)\nMalam tambahan: RM350 (1-4 org) / RM450 (5-8 org)' },
+    ];
+
+    // Send intro text first
+    await sendTextMessage(to,
+        `Here are our tent rental packages at Camp Mantap! 🏕️\n\n` +
+        `All packages include:\n` +
+        `- Air Mattress / Foam\n` +
+        `- Foam Pillows\n` +
+        `- Fan & Light\n` +
+        `- Table & Chairs\n\n` +
+        `*Note: Price does not include campsite fee (tapak)*`
+    );
+
+    // Send each detail sheet with a short delay
+    for (let i = 0; i < detailSheets.length; i++) {
+        const { file, caption } = detailSheets[i];
+        const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
+        console.log(`[TentDetails] Sending sheet ${i + 1}/${detailSheets.length}: ${file}`);
+        await sendImageMessage(to, imageUrl, caption);
+        if (i < detailSheets.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+
+    // Footer — point to booking links
+    await sendTextMessage(to,
+        `To book, check availability here:\n` +
+        `- BookTapak: https://booktapak.com/property/campmantap?locale=en\n` +
+        `- Escabee: https://escabee.com/campsites/camp-mantap\n\n` +
+        `Need more help? Feel free to ask! 😊`
+    );
+
+    console.log(`[TentDetails] All detail sheets sent to ${to}`);
 }
 
 // ---------------------------------------------------------------------------
