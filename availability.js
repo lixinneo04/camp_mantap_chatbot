@@ -9,8 +9,14 @@ if (typeof global.WebSocket === "undefined") {
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
+    process.env.SUPABASE_SERVICE_KEY,
+    {
+        db: {
+            schema: process.env.SUPABASE_SCHEMA || 'public'
+        }
+    }
 );
+
 
 // ---------------------------------------------------------------------------
 // Keyword detector — returns true if the customer is asking about availability
