@@ -183,6 +183,42 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
+// ── Supabase diagnostic route (TEMPORARY — remove after debugging) ──────────
+app.get('/test-db', async (req, res) => {
+    const results = {};
+
+    // 1. Try a SELECT from the conversations table
+    const { data: selectData, error: selectError } = await supabase
+        .from('conversations')
+        .select('*')
+        .limit(1);
+
+    results.select = selectError
+        ? { ok: false, code: selectError.code, message: selectError.message, details: selectError.details, hint: selectError.hint }
+        : { ok: true, rowCount: selectData.length };
+
+    // 2. Try an INSERT with the same fields the bot uses
+    const { error: insertError } = await supabase
+        .from('conversations')
+        .insert([{ phone_number: 'TEST_DIAGNOSTIC', role: 'user', message: 'db connectivity test' }]);
+
+    results.insert = insertError
+        ? { ok: false, code: insertError.code, message: insertError.message, details: insertError.details, hint: insertError.hint }
+        : { ok: true };
+
+    // 3. If insert succeeded, clean up the test row
+    if (!insertError) {
+        await supabase
+            .from('conversations')
+            .delete()
+            .eq('phone_number', 'TEST_DIAGNOSTIC');
+        results.cleanup = 'test row deleted';
+    }
+
+    res.json(results);
+});
+// ────────────────────────────────────────────────────────────────────────────
+
 // Home page
 app.get("/", (req, res) => {
     res.send("WhatsApp Webhook Server Running");
