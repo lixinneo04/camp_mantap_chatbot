@@ -157,29 +157,45 @@ function getRequestedImageType(text) {
         return 'river';
     }
 
-    // 9. Morning scenery
+    // 9. Morning AND night combined — check before individual morning/night
+    const morningAndNightPatterns = [
+        /\bmorning\b.*\bnight\b/i,    // "morning and night", "morning & night"
+        /\bnight\b.*\bmorning\b/i,    // "night and morning"
+        /\bpagi\b.*\bmalam\b/i,
+        /\bmalam\b.*\bpagi\b/i
+    ];
+    if (morningAndNightPatterns.some(p => p.test(lower))) {
+        return 'scenery';
+    }
+
+    // 10. Morning scenery
     const morningPatterns = [
-        /\bmorning\s+(view|sight|scenery|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\bmorning\s+(view|sight|scene|scenery|sceneries|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\b(show|send|share|see|view|display)\s+(me\s+)?(the\s+)?morning\b/i,  // "show me the morning"
         /\bgambar\s+pagi\b/i,
-        /\bpemandangan\s+pagi\b/i
+        /\bpemandangan\s+pagi\b/i,
+        /\bsuasana\s+pagi\b/i
     ];
     if (morningPatterns.some(p => p.test(lower))) {
         return 'morning';
     }
 
-    // 10. Night scenery
+    // 11. Night scenery
     const nightPatterns = [
-        /\bnight\s+(view|sight|scenery|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\bnight\s+(view|sight|scene|scenery|sceneries|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\b(show|send|share|see|view|display)\s+(me\s+)?(the\s+)?night\b/i,    // "show me the night"
         /\bgambar\s+malam\b/i,
-        /\bpemandangan\s+malam\b/i
+        /\bpemandangan\s+malam\b/i,
+        /\bsuasana\s+malam\b/i
     ];
     if (nightPatterns.some(p => p.test(lower))) {
         return 'night';
     }
 
-    // 11. General scenery / environment (morning + night + river combined)
+    // 12. General scenery / environment (morning + night + river combined)
     const sceneryPatterns = [
-        /\b(scenery|landscape|surrounding|environment|atmosphere|ambiance|ambience)\b/i,
+        /\bsceneri(?:es|y)\b/i,         // "scenery" AND "sceneries" (plural fix)
+        /\b(landscape|surrounding|environment|atmosphere|ambiance|ambience)\b/i,
         /\b(pemandangan|suasana|persekitaran)\b/i,
         /\b(nature|alam\s+semula\s+jadi)\b/i
     ];
