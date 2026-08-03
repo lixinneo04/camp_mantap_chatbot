@@ -123,7 +123,71 @@ function getRequestedImageType(text) {
         return 'campsite';
     }
 
-    // 6. Generic image request — ambiguous, ask the customer which type they want
+    // 6. Archery
+    const archeryPatterns = [
+        /\barchery\b/i,
+        /\bmemanah\b/i,
+        /\bpanah\b/i,
+        /\b(archery|memanah|panah)\s+(photo|image|picture|pic|foto|gambar)s?\b/i
+    ];
+    if (archeryPatterns.some(p => p.test(lower))) {
+        return 'archery';
+    }
+
+    // 7. Durian / Seasonal fruit
+    const durianPatterns = [
+        /\bdurian\b/i,
+        /\bseasonal\s+fruit\b/i,
+        /\bfruit\s+(collection|activity|season|photo|image|gambar)s?\b/i,
+        /\b(gambar|foto)\s+(durian|buah)\b/i,
+        /\bbuah\s+(durian|segar|musim)\b/i,
+        /\bbeli\s+buah\b/i
+    ];
+    if (durianPatterns.some(p => p.test(lower))) {
+        return 'durian';
+    }
+
+    // 8. River
+    const riverPatterns = [
+        /\briver\b/i,
+        /\bsungai\b/i,
+        /\b(river|sungai)\s+(photo|image|picture|pic|foto|gambar|view)s?\b/i
+    ];
+    if (riverPatterns.some(p => p.test(lower))) {
+        return 'river';
+    }
+
+    // 9. Morning scenery
+    const morningPatterns = [
+        /\bmorning\s+(view|sight|scenery|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\bgambar\s+pagi\b/i,
+        /\bpemandangan\s+pagi\b/i
+    ];
+    if (morningPatterns.some(p => p.test(lower))) {
+        return 'morning';
+    }
+
+    // 10. Night scenery
+    const nightPatterns = [
+        /\bnight\s+(view|sight|scenery|photo|image|picture|pic|foto|gambar)s?\b/i,
+        /\bgambar\s+malam\b/i,
+        /\bpemandangan\s+malam\b/i
+    ];
+    if (nightPatterns.some(p => p.test(lower))) {
+        return 'night';
+    }
+
+    // 11. General scenery / environment (morning + night + river combined)
+    const sceneryPatterns = [
+        /\b(scenery|landscape|surrounding|environment|atmosphere|ambiance|ambience)\b/i,
+        /\b(pemandangan|suasana|persekitaran)\b/i,
+        /\b(nature|alam\s+semula\s+jadi)\b/i
+    ];
+    if (sceneryPatterns.some(p => p.test(lower))) {
+        return 'scenery';
+    }
+
+    // 12. Generic image request — ambiguous, ask the customer which type they want
     const genericImagePatterns = [
         /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery)\b/i,
         /\b(images?|photos?|pictures?|pics?|gallery)\b/i,
@@ -630,7 +694,7 @@ async function handleImageRequest(to, type) {
 
         await sendTextMessage(to,
             `Here are our camp zone photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
-            `Total: ${campFiles.length} photos / foto`
+                            `Total: ${campFiles.length} photos / foto`
         );
 
         for (let i = 0; i < campFiles.length; i++) {
@@ -644,14 +708,127 @@ async function handleImageRequest(to, type) {
             }
         }
     }
-    else if (type === 'ask') {
-        // Generic/ambiguous image request — ask the customer to clarify
+    else if (type === 'archery') {
+        const archeryFiles = imageFiles.filter(f => /archery/i.test(f));
+        if (archeryFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no archery photos are available at the moment. 😔\nMaaf, tiada gambar memanah disediakan buat masa ini.");
+            return;
+        }
         await sendTextMessage(to,
-            `Sure! We have two types of photos available 📸\n\n` +
-            `- *Campsite photos (Tapak 1–9)* — Photos of the individual riverside camping spots\n` +
-            `- *Camp zone photos (Camp A/B/C/D)* — Photos of the broader camp area sections\n\n` +
-            `Which would you like to see? 😊\n` +
-            `_(You can also ask for: Tent rental photos, ATV photos, or Pricelist poster)_`
+            `Here are our archery activity photos! 🏹🎯\nBerikut adalah foto aktiviti memanah kami! 🏹🎯\n\nTotal: ${archeryFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < archeryFiles.length; i++) {
+            const filename = archeryFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending archery photo ${i + 1}/${archeryFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '🏹 Archery Activity / Aktiviti Memanah — Camp Mantap');
+            if (i < archeryFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'durian') {
+        const durianFiles = imageFiles.filter(f => /durian/i.test(f));
+        if (durianFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no durian/fruit photos are available at the moment. 😔\nMaaf, tiada gambar durian/buah disediakan buat masa ini.");
+            return;
+        }
+        await sendTextMessage(to,
+            `Here are our seasonal durian fruit photos! 🍈🌿\nBerikut adalah foto aktiviti beli buah durian kami (mengikut musim)! 🍈🌿\n\nTotal: ${durianFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < durianFiles.length; i++) {
+            const filename = durianFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending durian photo ${i + 1}/${durianFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '🍈 Seasonal Durian / Buah Musiman — Camp Mantap');
+            if (i < durianFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'river') {
+        const riverFiles = imageFiles.filter(f => /^river\./i.test(f));
+        if (riverFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no river photos are available at the moment. 😔\nMaaf, tiada gambar sungai disediakan buat masa ini.");
+            return;
+        }
+        await sendTextMessage(to,
+            `Here is our beautiful riverside view! 🌊🏕️\nBerikut adalah pemandangan tepi sungai kami! 🌊🏕️\n\nTotal: ${riverFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < riverFiles.length; i++) {
+            const filename = riverFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending river photo ${i + 1}/${riverFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '🌊 Riverside View / Pemandangan Sungai — Camp Mantap');
+            if (i < riverFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'morning') {
+        const morningFiles = imageFiles.filter(f => /^morning/i.test(f));
+        if (morningFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no morning view photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan pagi disediakan buat masa ini.");
+            return;
+        }
+        await sendTextMessage(to,
+            `Here are our morning scenery photos! 🌅🏕️\nBerikut adalah foto pemandangan pagi di Camp Mantap! 🌅🏕️\n\nTotal: ${morningFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < morningFiles.length; i++) {
+            const filename = morningFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending morning photo ${i + 1}/${morningFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '🌅 Morning Scenery / Pemandangan Pagi — Camp Mantap');
+            if (i < morningFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'night') {
+        const nightFiles = imageFiles.filter(f => /^night/i.test(f));
+        if (nightFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no night view photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan malam disediakan buat masa ini.");
+            return;
+        }
+        await sendTextMessage(to,
+            `Here are our night scenery photos! 🌙✨🏕️\nBerikut adalah foto pemandangan malam di Camp Mantap! 🌙✨🏕️\n\nTotal: ${nightFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < nightFiles.length; i++) {
+            const filename = nightFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending night photo ${i + 1}/${nightFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '🌙 Night Scenery / Pemandangan Malam — Camp Mantap');
+            if (i < nightFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'scenery') {
+        const sceneryFiles = imageFiles.filter(f => /^(morning|night|river)/i.test(f));
+        if (sceneryFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no scenery photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan disediakan buat masa ini.");
+            return;
+        }
+        await sendTextMessage(to,
+            `Here are our Camp Mantap scenery photos! 🌅🌙🌊\nBerikut adalah foto suasana dan pemandangan Camp Mantap! 🌅🌙🌊\n\nTotal: ${sceneryFiles.length} photo(s) / foto`
+        );
+        for (let i = 0; i < sceneryFiles.length; i++) {
+            const filename = sceneryFiles[i];
+            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
+            const label = /^morning/i.test(filename) ? '🌅 Morning View' : /^night/i.test(filename) ? '🌙 Night View' : '🌊 River View';
+            console.log(`[Images] Sending scenery photo ${i + 1}/${sceneryFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, `${label} / Pemandangan — Camp Mantap`);
+            if (i < sceneryFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'ask') {
+        await sendTextMessage(to,
+            `Sure! We have photos available for the following 📸\n\n` +
+            `*Facilities & Sites*\n` +
+            `- Campsite photos (Tapak 1–9)\n` +
+            `- Camp zone photos (Camp A / B / C / D)\n` +
+            `- River view\n\n` +
+            `*Scenery*\n` +
+            `- Morning scenery\n` +
+            `- Night scenery\n\n` +
+            `*Activities*\n` +
+            `- ATV ride photos\n` +
+            `- Archery photos\n` +
+            `- Seasonal durian fruit photos\n\n` +
+            `*Pricing*\n` +
+            `- Campsite pricelist poster\n` +
+            `- Tent rental packages\n\n` +
+            `Which would you like to see? 😊`
         );
         console.log(`[Images] Ambiguous image request from ${to} — sent clarification prompt`);
     }
