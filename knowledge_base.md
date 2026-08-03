@@ -78,10 +78,12 @@ Ada kemudahan:
 - Semasa hujan lebat, paras air akan meningkat dengan ketara dan kami telah melihat paras tertinggi iaitu 7 kaki. Perkarangan kami berada pada 10 kaki di atas dan setakat ini kami tidak menemui air melimpah ke kawasan kami.
 
 ## Campsite Categories & Pricelist
-We offer three categories of campsites (Standard, Medium, and Family) based on size and capacity:
+We offer three categories of campsites (Standard, Medium, and Family) based on size and capacity.
+Each campsite is identified by a number (Campsite 1 to Campsite 9), also referred to as "Tapak".
+These are DIFFERENT from the Camp zones (Camp A, Camp B, Camp C, Camp D) which refer to the physical area/section of the campground.
 
 ### Standard
-- Campsites: Camp 2, Camp 3
+- Campsites: Campsite 2, Campsite 3
 - Camp Size: 7m x 10m
 - Pax Included in Price: 4 Pax
 - Max Pax: 6 Pax
@@ -89,7 +91,7 @@ We offer three categories of campsites (Standard, Medium, and Family) based on s
 - Pricing: RM 100 / night
 
 ### Medium
-- Campsites: Camp 4, Camp 6, Camp 7, Camp 8, Camp 9
+- Campsites: Campsite 4, Campsite 6, Campsite 7, Campsite 8, Campsite 9
 - Camp Size: 8m x 11m
 - Pax Included in Price: 6 Pax
 - Max Pax: 8 Pax
@@ -97,7 +99,7 @@ We offer three categories of campsites (Standard, Medium, and Family) based on s
 - Pricing: RM 130 / night
 
 ### Family
-- Campsites: Camp 1, Camp 5
+- Campsites: Campsite 1, Campsite 5
 - Camp Size: 10m x 13m
 - Pax Included in Price: 8 Pax
 - Max Pax: 10 Pax
@@ -146,6 +148,9 @@ All styles include: Air Mattress / Foam, Foam Pillows, Fan & Light, Table & Chai
   - 1-4 orang: RM 350.00
   - 5-8 orang: RM 450.00
 
-## Campsite Photos & Gallery
-We have photos of our campsites and tent package details available! If a customer asks to see campsite photos/images, or asks about tent types/prices/packages/facilities, the bot will automatically send them the relevant images directly. Just let customers know they can ask for photos or pricing info anytime.
+## Photos & Gallery
+We have photos of two types:
+- *Campsite photos (Tapak 1–9)*: Photos of the individual numbered camping spots along the river.
+- *Camp area photos (Camp A/B/C/D)*: Photos of the broader camp zone/section layouts.
 
+If a customer asks to see campsite photos/images (tapak), or asks about Camp A/B/C/D area photos, the bot will automatically send them the relevant images. Customers can also ask about tent rental types/prices/packages, ATV, or the campsite pricelist poster anytime.

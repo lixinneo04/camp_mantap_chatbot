@@ -93,39 +93,44 @@ function getRequestedImageType(text) {
         return 'atv';
     }
 
-    // 4. Campsite picture (with "Tapak")
-    // Match "campsite picture", "campsite photo", "gambar tapak", "tunjuk tapak"
+    // 4. Camp zone photos (Camp A / B / C / D) — checked BEFORE campsite to avoid misrouting
+    // Matches: "Camp A photo", "show me Camp B", "gambar Camp C", "Camp D pictures", etc.
+    const campZonePatterns = [
+        /\bcamp\s+[abcd]\b/i,                                                                  // "Camp A", "camp b"
+        /\bcamp\s+[abcd]\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,               // "Camp A photos"
+        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?camp\s+[abcd]\b/i,       // "photos of Camp B"
+        /\bcamp\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,                         // "camp photos" (no specific letter)
+        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?camp\b(?!\s*site)/i,     // "photos of camp" (not campsite)
+        /\bgambar\s+camp\b(?!\s*site)/i,                                                       // "gambar camp" (not campsite)
+        /\b(tunjuk|lihat|tengok)\s+camp\b(?!\s*site)/i,                                       // "tunjuk camp" (not campsite)
+        /\bcamp\s+[abcd]\s+(area|zone|kawasan|bahagian)\b/i                                    // "Camp A area"
+    ];
+    if (campZonePatterns.some(p => p.test(lower))) {
+        return 'camp';
+    }
+
+    // 5. Campsite (Tapak / numbered spots 1–9) photos
+    // Matches: "campsite photo", "tapak picture", "gambar tapak", etc.
     const campsitePatterns = [
-        /\b(campsite)\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
-        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?(campsite)\b/i,
+        /\bcampsite\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
+        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?campsite\b/i,
         /\bgambar\s+(tapak|campsite)\b/i,
         /\b(tunjuk|lihat|tengok)\s+(tapak|campsite)\b/i,
-        /\btapak\b/i
+        /\btapak\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
+        /\btapak\s+[1-9]\b/i                                                                   // "tapak 3", "tapak 7"
     ];
     if (campsitePatterns.some(p => p.test(lower))) {
         return 'campsite';
     }
 
-    // 4. Camp picture (with "Camp A/B/C/D")
-    // Match "camp picture", "camp photo", "gambar camp", "tunjuk camp"
-    const campPatterns = [
-        /\bcamp\s+(picture|photo|image|pic|foto|gambar|gallery)s?\b/i,
-        /\b(picture|photo|image|pic|foto|gambar|gallery)s?\s+(of\s+)?(camp)\b/i,
-        /\bgambar\s+camp\b/i,
-        /\b(tunjuk|lihat|tengok)\s+camp\b/i
-    ];
-    if (campPatterns.some(p => p.test(lower))) {
-        return 'camp';
-    }
-
-    // Generic fallback for any photo/image/picture/gallery/photo request
+    // 6. Generic image request — ambiguous, ask the customer which type they want
     const genericImagePatterns = [
         /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery)\b/i,
         /\b(images?|photos?|pictures?|pics?|gallery)\b/i,
         /\b(gambar|foto|imej)\b/i
     ];
     if (genericImagePatterns.some(p => p.test(lower))) {
-        return 'campsite';
+        return 'ask';
     }
 
     return null;
@@ -624,7 +629,7 @@ async function handleImageRequest(to, type) {
         }
 
         await sendTextMessage(to,
-            `Here are our camp photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
+            `Here are our camp zone photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
             `Total: ${campFiles.length} photos / foto`
         );
 
@@ -638,6 +643,17 @@ async function handleImageRequest(to, type) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
+    }
+    else if (type === 'ask') {
+        // Generic/ambiguous image request — ask the customer to clarify
+        await sendTextMessage(to,
+            `Sure! We have two types of photos available 📸\n\n` +
+            `- *Campsite photos (Tapak 1–9)* — Photos of the individual riverside camping spots\n` +
+            `- *Camp zone photos (Camp A/B/C/D)* — Photos of the broader camp area sections\n\n` +
+            `Which would you like to see? 😊\n` +
+            `_(You can also ask for: Tent rental photos, ATV photos, or Pricelist poster)_`
+        );
+        console.log(`[Images] Ambiguous image request from ${to} — sent clarification prompt`);
     }
 }
 
