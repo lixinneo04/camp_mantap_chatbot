@@ -7,15 +7,21 @@ if (typeof global.WebSocket === "undefined") {
 }
 
 const { createClient } = require('@supabase/supabase-js');
+
+// Dedicated client for availability — always targets the 'campmantap' schema
+// where view_availability_public lives. This is intentionally separate from
+// the main server.js client (which targets 'public' for the conversations table).
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY,
     {
         db: {
-            schema: process.env.SUPABASE_SCHEMA || 'public'
+            schema: process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap'
         }
     }
 );
+
+console.log(`[Availability] Supabase client schema: ${process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap'}`);
 
 
 // ---------------------------------------------------------------------------

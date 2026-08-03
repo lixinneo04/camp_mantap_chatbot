@@ -304,6 +304,45 @@ app.get('/test-db', async (req, res) => {
 });
 // ────────────────────────────────────────────────────────────────────────────
 
+// ── Availability diagnostic route (TEMPORARY — remove after debugging) ───────
+app.get('/test-availability', async (req, res) => {
+    const { createClient } = require('@supabase/supabase-js');
+
+    // Use the same dedicated campmantap client as availability.js
+    const availClient = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_KEY,
+        { db: { schema: process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap' } }
+    );
+
+    const results = {
+        schema_used: process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap',
+        view_availability_public: {},
+        view_availability: {}
+    };
+
+    // Test view_availability_public
+    const { data: d1, error: e1 } = await availClient
+        .from('view_availability_public')
+        .select('*')
+        .limit(5);
+    results.view_availability_public = e1
+        ? { ok: false, error: e1.message, code: e1.code }
+        : { ok: true, rowCount: d1.length, columns: d1.length > 0 ? Object.keys(d1[0]) : [], sample: d1.slice(0, 2) };
+
+    // Test view_availability
+    const { data: d2, error: e2 } = await availClient
+        .from('view_availability')
+        .select('*')
+        .limit(5);
+    results.view_availability = e2
+        ? { ok: false, error: e2.message, code: e2.code }
+        : { ok: true, rowCount: d2.length, columns: d2.length > 0 ? Object.keys(d2[0]) : [], sample: d2.slice(0, 2) };
+
+    res.json(results);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Home page
 app.get("/", (req, res) => {
     res.send("WhatsApp Webhook Server Running");
