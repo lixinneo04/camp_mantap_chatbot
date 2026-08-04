@@ -169,9 +169,3 @@ However, we do have plenty of *photos* available! You can ask me for:
 - ATV, Archery & Durian activity photos
 
 Just let me know which you'd like to see! 📸"
-
-## World Cup 2026
-Spain won the world cup 2026 final against Argentina.
-- Date: July 19, 2026
-- Location: East Rutherford, New Jersey, USAVenue: MetLife Stadium (referred to during the tournament as New York New Jersey Stadium)
-- Result: Spain defeated Argentina 1–0 in extra time
