@@ -148,7 +148,7 @@ All styles include: Air Mattress / Foam, Foam Pillows, Fan & Light, Table & Chai
   - 1-4 orang: RM 350.00
   - 5-8 orang: RM 450.00
 
-## Photos & Gallery
+## Photos and Gallery
 We have photos of two types:
 - *Campsite photos (Tapak 1–9)*: Photos of the individual numbered camping spots along the river.
 - *Camp area photos (Camp A/B/C/D)*: Photos of the broader camp zone/section layouts.
@@ -169,4 +169,4 @@ However, we do have plenty of *photos* available! You can ask me for:
 - ATV, Archery & Durian activity photos
 - Tent rental & pricelist poster
 
-Just let me know which you'd like to see! 📸"
+Just let me know which you'd like to see! 📸" 
