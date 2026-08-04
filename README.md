@@ -91,7 +91,7 @@ Acts as the central entry point and handles HTTP routing, request filtering, con
 * **History Management**: Pulls the last 10 messages from the `conversations` table in Supabase. Ensures the history sent to Gemini begins with a `user` role turn (cleaning any leading `model` role outputs).
 * **Welcome Engine**: Detects if a phone number has zero prior records. If true, delivers a predefined `WELCOME_MESSAGE` before generating the main response.
 * **Retry Loop**: Incorporates a 3-attempt retry sequence with a 2-second sleep duration specifically when Gemini throws a `503 Service Unavailable` error.
-* **Fallback Resolution**: If any uncaught error interrupts the execution, sends a fallback message directing the user to Miss Jenny directly: `+60 12-345 6789`.
+* **Fallback Resolution**: If any uncaught error interrupts the execution, sends a fallback message asking the customer to try again later.
 * **Direct Image & Detail Sheet Sending**: Intercepts requests for campsite photos (Tapak), camp layout photos (Camp A/B/C/D), pricing lists/posters, tent packages, or ATV guided tours using regex patterns in `getRequestedImageType` and sends the correct image attachments directly via the WhatsApp Business API (using `handleImageRequest`) with a short 500ms delay to prevent rate-limiting, bypassing Gemini entirely. All image responses include bilingual (English and Malay) explanations and captions.
 
 ### 4.2. [availability.js](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot/availability.js) (Live Availability Agent)
@@ -219,20 +219,16 @@ The default prompt contains:
   2. Dynamic language support (Malay and English).
   3. Strict name personalization (remember and use customer's stated name).
   4. Context-based response compilation.
-  5. Graceful hands-off to Miss Jenny for unhandled requests.
+  5. Friendly fallback response for unhandled requests asking the customer to try again or clarify.
 
 ### 6.2. Safety Constraints
 * **Context Adherence**: Gemini is instructed to answer strictly based on the system prompt narrative (about yourself/services), and the injected Knowledge Base and Availability contexts.
 * **Identity & Service Inquiries**: If the customer asks who the assistant is or what general services Camp Mantap provides, the bot is allowed to answer using the system prompt narrative or the [knowledge_base.md](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot/knowledge_base.md) details.
-* **Missing Information Fallback**: If a query is not covered by the system prompt narrative, Knowledge Base, or Availability Context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text containing Miss Jenny's direct contact details:
+* **Missing Information Fallback**: If a query is not covered by the system prompt narrative, Knowledge Base, or Availability Context, the bot is prohibited from guessing or using general knowledge. It is programmed to return the exact text asking the customer to try again later or repeat the question in a clearer form:
   ```text
   Sorry, I'm unable to provide an answer to that question at the moment. 😔
   
-  For further details, please contact us directly:
-  📞 +60 12-345 6789
-  💬 https://wa.me/60123456789
-  
-  Miss Jenny will be happy to assist you.
+  Please try again later or repeat your question in a clearer form.
   ```
 * **Preferred Name Memory**: The prompt instructs Gemini to adopt and remember the name by which the customer wishes to be addressed.
 * **Stale Message Defense**: Restricts webhook handling to messages under 30 seconds old to prevent spamming customers after server downtime.

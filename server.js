@@ -42,16 +42,17 @@ I'm the Camp Mantap virtual assistant. I can help you with:
 Feel free to ask me anything in English or Bahasa Melayu!`;
 const FALLBACK_MESSAGE = `Sorry, I'm having some technical difficulties right now. 😔
 
-Please contact Miss Jenny directly for assistance:
-📞 +60 12-345 6789
-💬 https://wa.me/60123456789`;
+Please try again later`;
 
-const HUMAN_HANDOFF_MESSAGE = `Sure! You can reach our person-in-charge, *Miss Jenny*, directly:
+const HUMAN_HANDOFF_MESSAGE = `Sorry, I'm unable to assist with that request at the moment. 😔
 
-📞 *Phone / WhatsApp:* +60 12-345 6789
-💬 *WhatsApp Link:* https://wa.me/60123456789
+Please try again later or repeat your question in a clearer form.
 
-She will be happy to assist you further. 😊`;
+---
+
+Maaf, saya tidak dapat membantu dengan permintaan tersebut buat masa ini. 😔
+
+Sila cuba lagi nanti atau ulang soalan anda dengan lebih jelas.`;
 
 // ---------------------------------------------------------------------------
 // Route incoming image requests to the correct categories
@@ -651,7 +652,7 @@ async function handleImageRequest(to, type) {
 
     if (imageFiles.length === 0) {
         console.log('[Images] No image files found in public/images');
-        await sendTextMessage(to, "Sorry, no images are available at the moment. 😔\nSila hubungi Miss Jenny untuk maklumat lanjut:\n📞 +60 12-345 6789\n💬 https://wa.me/60123456789");
+        await sendTextMessage(to, "Sorry, no images are available at the moment. 😔\nPlease try again later or repeat your question in a clearer form.\n\n---\n\nMaaf, tiada gambar disediakan buat masa ini. 😔\nSila cuba lagi nanti atau ulang soalan anda dengan lebih jelas.");
         return;
     }
 
@@ -970,7 +971,7 @@ YOUR TASKS:
    - If the requested date(s) are listed as available, state that they are available and provide the details (site, price, etc.) listed. Do NOT state that they are unavailable or fully booked.
    - If the requested date(s) are NOT listed in the live availability data, or if the live availability data is empty, politely explain that those specific dates are fully booked or unavailable, and guide them to check real-time availability or book via the official links.
 5. Answer other FAQs, rules, and campsite parameters using the Knowledge Base.
-6. If a question is not covered in the provided Knowledge Base or Availability Context, output EXACTLY our standard fallback message and refer them to Miss Jenny.
+6. If a question is not covered in the provided Knowledge Base or Availability Context, output EXACTLY our standard fallback message asking them to try again later or repeat the question in a clearer form.
 
 WHATSAPP FORMATTING RULES (MUST follow strictly):
 - For bullet points and lists, ALWAYS use a dash (-) followed by a space. NEVER use asterisk (*) as a bullet point.
@@ -994,44 +995,24 @@ RULE A — If the question is RELATED to Camp Mantap (e.g. about our packages, f
 [If customer wrote in English]:
 "Sorry, I'm unable to provide an answer to that question at the moment. 😔
 
-For further details, please contact us directly:
-📞 +60 12-345 6789
-💬 https://wa.me/60123456789
-
-Miss Jenny will be happy to assist you."
+Please try again later or repeat your question in a clearer form."
 
 [If customer wrote in Bahasa Melayu]:
 "Maaf, saya tidak dapat menjawab soalan tersebut buat masa ini. 😔
 
-Untuk maklumat lanjut, sila hubungi kami terus:
-📞 +60 12-345 6789
-💬 https://wa.me/60123456789
-
-Cik Jenny akan sedia membantu anda."
+Sila cuba lagi nanti atau ulang soalan anda dengan lebih jelas."
 
 RULE B — If the question is COMPLETELY UNRELATED to Camp Mantap (e.g. general knowledge, other topics, other businesses), output EXACTLY the matching version below:
 
 [If customer wrote in English]:
 "Thank you for your question! 😊 I'm Mantap Assistant, and I'm specifically here to help with anything related to Camp Mantap — such as our packages, facilities, activities, availability, and bookings.
 
-I'm afraid I'm not able to assist with topics outside of Camp Mantap, but I'd love to help if you have any questions about us!
-
-If you need further assistance beyond what I can offer, please don't hesitate to reach out to our team directly:
-📞 +60 12-345 6789
-💬 https://wa.me/60123456789
-
-Miss Jenny will be more than happy to help you. 🌟"
+I'm afraid I'm not able to assist with topics outside of Camp Mantap. Please try again later or repeat your question in a clearer form if it is about Camp Mantap!"
 
 [If customer wrote in Bahasa Melayu]:
 "Terima kasih atas soalan anda! 😊 Saya Mantap Assistant, dan saya di sini khusus untuk membantu dengan segala perkara berkaitan Camp Mantap — seperti pakej, kemudahan, aktiviti, ketersediaan, dan tempahan kami.
 
-Saya tidak dapat membantu dengan topik di luar Camp Mantap, tetapi saya berbesar hati untuk menjawab sebarang soalan tentang kami!
-
-Jika anda memerlukan bantuan lanjut, jangan segan untuk menghubungi pasukan kami terus:
-📞 +60 12-345 6789
-💬 https://wa.me/60123456789
-
-Cik Jenny akan sedia membantu anda. 🌟"
+Saya tidak dapat membantu dengan topik di luar Camp Mantap. Sila cuba lagi nanti atau ulang soalan anda dengan lebih jelas jika ia mengenai Camp Mantap!"
 
 === CAMP MANTAP OFFICIAL KNOWLEDGE BASE ===
 ${KNOWLEDGE_BASE}
