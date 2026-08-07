@@ -22,6 +22,7 @@ const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
 const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
+const { listDriveImages, driveImageUrl } = require('./google-drive');
 
 const GEMINI_MODEL = "gemini-3.5-flash";
 const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
@@ -204,7 +205,28 @@ function getRequestedImageType(text) {
         return 'scenery';
     }
 
-    // 12. Generic image request — ambiguous, ask the customer which type they want
+    // 12. Payment return record (refund record lookup by name)
+    const paymentReturnPatterns = [
+        /\b(payment\s+return|return\s+payment|refund\s+record|rekod\s+bayaran\s+balik|rekod\s+refund)\b/i,
+        /\b(refund|pulangan|bayaran\s+balik)\s+(record|rekod|status|slip|proof|bukti)\b/i,
+        /\b(my|my\s+refund|semak|check)\s+(refund|payment\s+return|bayaran\s+balik)\b/i,
+        /\b(payment\s+return|return|refund)\s+(record|rekod|saya|aku|my)\b/i,
+    ];
+    if (paymentReturnPatterns.some(p => p.test(lower))) {
+        return 'payment_return';
+    }
+
+    // 13. Ingredients budget
+    const ingredientsBudgetPatterns = [
+        /\b(ingredients?|bahan|barang)\s+(budget|belanjawan|list|senarai)\b/i,
+        /\b(budget|belanjawan)\s+(ingredients?|bahan|barang|masak)\b/i,
+        /\bingredients?\s+budget\b/i,
+    ];
+    if (ingredientsBudgetPatterns.some(p => p.test(lower))) {
+        return 'ingredients_budget';
+    }
+
+    // 14. Generic image request — ambiguous, ask the customer which type they want
     const genericImagePatterns = [
         /\b(show|send|share|see|view|look\s*at|display)\s+(me\s+)?(the\s+)?(images?|photos?|pictures?|pics?|gallery)\b/i,
         /\b(images?|photos?|pictures?|pics?|gallery)\b/i,
@@ -865,6 +887,76 @@ async function handleImageRequest(to, type) {
             console.log(`[Images] Sending scenery photo ${i + 1}/${sceneryFiles.length}: ${filename}`);
             await sendImageMessage(to, imageUrl, `${label} / Pemandangan — Camp Mantap`);
             if (i < sceneryFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'payment_return') {
+        const folderId = process.env.GDRIVE_FOLDER_PAYMENT_RETURN_RECORDS;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, payment return records are not available at the moment. 😔\nPlease contact our admin directly.\n\n---\n\nMaaf, rekod bayaran balik tidak tersedia buat masa ini. Sila hubungi admin kami secara terus.");
+            return;
+        }
+
+        // Extract a name from the message to filter records
+        const nameMatch = text.match(/\b(?:for|of|nama|name|bagi)\s+([A-Za-z][A-Za-z\s]{1,30})/i)
+            || text.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/)  // capitalised proper name e.g. "Ahmad Bin Ali"
+            || text.match(/\b([a-z]{3,})(?:'s)?\s+(?:record|refund|payment)/i);
+        const searchName = nameMatch ? nameMatch[1].trim().toLowerCase() : null;
+
+        const allFiles = await listDriveImages(folderId);
+        if (allFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no payment return records are available at the moment. 😔\n\nMaaf, tiada rekod bayaran balik tersedia buat masa ini.");
+            return;
+        }
+
+        const matchedFiles = searchName
+            ? allFiles.filter(f => f.name.toLowerCase().includes(searchName))
+            : allFiles;
+
+        if (matchedFiles.length === 0) {
+            await sendTextMessage(to,
+                `Sorry, I couldn't find a payment return record for *${nameMatch?.[1]?.trim()}*. 😔\n\n` +
+                `Please double-check the name or contact our admin directly.\n\n---\n\n` +
+                `Maaf, tiada rekod bayaran balik dijumpai untuk *${nameMatch?.[1]?.trim()}*. ` +
+                `Sila semak semula nama atau hubungi admin kami.`
+            );
+            return;
+        }
+
+        await sendTextMessage(to,
+            `Here are the payment return record(s) found 📄\n` +
+            (searchName ? `Name / Nama: *${nameMatch?.[1]?.trim()}*\n` : '') +
+            `Total: ${matchedFiles.length} record(s)`
+        );
+        for (let i = 0; i < matchedFiles.length; i++) {
+            const f = matchedFiles[i];
+            const imageUrl = driveImageUrl(f.id);
+            console.log(`[Drive] Sending payment return record ${i + 1}/${matchedFiles.length}: ${f.name}`);
+            await sendImageMessage(to, imageUrl, `💸 Payment Return Record — ${f.name}`);
+            if (i < matchedFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'ingredients_budget') {
+        const folderId = process.env.GDRIVE_FOLDER_INGREDIENTS_BUDGET;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, the ingredients budget is not available at the moment. 😔\nPlease contact our admin directly.\n\n---\n\nMaaf, belanjawan bahan tidak tersedia buat masa ini. Sila hubungi admin kami secara terus.");
+            return;
+        }
+
+        const allFiles = await listDriveImages(folderId);
+        if (allFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, no ingredients budget files are available at the moment. 😔\n\nMaaf, tiada fail belanjawan bahan tersedia buat masa ini.");
+            return;
+        }
+
+        await sendTextMessage(to,
+            `Here are the ingredients budget file(s)! 🛒📋\nBerikut adalah fail belanjawan bahan kami! 🛒📋\n\nTotal: ${allFiles.length} file(s)`
+        );
+        for (let i = 0; i < allFiles.length; i++) {
+            const f = allFiles[i];
+            const imageUrl = driveImageUrl(f.id);
+            console.log(`[Drive] Sending ingredients budget file ${i + 1}/${allFiles.length}: ${f.name}`);
+            await sendImageMessage(to, imageUrl, `🛒 Ingredients Budget — ${f.name}`);
+            if (i < allFiles.length - 1) await new Promise(r => setTimeout(r, 500));
         }
     }
     else if (type === 'ask') {
