@@ -21,7 +21,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
-const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
 const { listDriveImages, driveImageUrl } = require('./google-drive');
 
 const GEMINI_MODEL = "gemini-3.5-flash";
