@@ -21,8 +21,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
-const { isAvailabilityQuestion, getAvailabilityContext } = require("./availability");
-
 const GEMINI_MODEL = "gemini-3.5-flash";
 const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
 
@@ -53,6 +51,63 @@ Please try again later or repeat your question in a clearer form.
 Maaf, saya tidak dapat membantu dengan permintaan tersebut buat masa ini. 😔
 
 Sila cuba lagi nanti atau ulang soalan anda dengan lebih jelas.`;
+
+// ---------------------------------------------------------------------------
+// Detect availability queries
+// ---------------------------------------------------------------------------
+const DIRECT_AVAILABILITY_PATTERNS = [
+    /\bav[a-z]{0,3}il[a-z]{0,5}t[yi]\b/i,        // availability / availabiliti / avilability / availabilty
+    /\bav[a-z]{0,2}il[a-z]{0,2}ble?\b/i,          // available / availble / avialable
+    /\bbo{1,2}ki?n?g?\b/i,                        // book / booking / boking / bokking
+    /\bre[sz]e?r{1,2}v[a-z]{0,4}(?:on|tion)\b/i, // reserve / reservation / reservaton
+    /\bvac[ae]nc[ey]\b/i,                         // vacancy / vacancies
+    /\btempah(an)?\b/i                            // tempah / tempahan
+];
+
+const CONTEXTUAL_AVAILABILITY_PATTERNS = [
+    // English: combinations of inquiry/intent + slot terms
+    /\b(?:any|free|open|got|check|still|want|plan|can|is\s+there|what|which)\s+(?:[a-z]+\s+)?(?:slot|site|spot|space|room|pitch|opening|date|day)s?\b/i,
+    // English: slot terms + available
+    /\b(?:slot|site|spot|space|room|pitch|opening|date|day)s?\s+(?:is\s+)?available\b/i,
+    // English: "still got" or "got space/slot/site/spot"
+    /\b(?:still\s+got|got\s+(?:space|slot|site|spot|room))\b/i,
+    // English: camp intent
+    /\b(?:can|want|plan)\s+(?:we|i)?\s*camp\b/i,
+    
+    // Malay: combinations of inquiry/status + slot terms
+    /\b(?:ada|kosong|penuh|full|boleh|nak|check|semak|bila|masih)\s+(?:[a-z]+\s+)?(?:tempat|slot|tapak|ruang|tarikh|hari)s?\b/i,
+    // Malay: specific availability indicators
+    /\b(?:kosong|full|penuh)\s+tak\b/i,
+    /\b(?:masih|ada)\s+kosong\b/i,
+    /\bboleh\s+camp\b/i,
+    /\bmasih\s+ada\b/i,
+    /\bbila\s+ada\b/i
+];
+
+const DATE_FORMAT_PATTERNS = [
+    /\b(?:0?[1-9]|[12]\d|3[01])[/\-.](?:0?[1-9]|1[0-2])(?:[/\-.](?:\d{4}|\d{2}))?\b/,
+    /\b\d{4}[/\-.](?:0?[1-9]|1[0-2])[/\-.](?:0?[1-9]|[12]\d|3[01])\b/,
+    /\b(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th|hb)?\s*(?:of\s+)?(?:jan(?:uary)?|januari|feb(?:ruary)?|februari|mar(?:ch)?|mac|apr(?:il)?|may|mei|jun(?:e)?|julai|aug(?:ust)?|ogos|sept?(?:ember)?|oct(?:ober)?|oktober|nov(?:ember)?|november|dec(?:ember)?|disember)\b/i,
+    /\b(?:jan(?:uary)?|januari|feb(?:ruary)?|februari|mar(?:ch)?|mac|apr(?:il)?|may|mei|jun(?:e)?|julai|aug(?:ust)?|ogos|sept?(?:ember)?|oct(?:ober)?|oktober|nov(?:ember)?|november|dec(?:ember)?|disember)\s*(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b/i
+];
+
+function isAvailabilityQuestion(text) {
+    const lower = text.toLowerCase();
+
+    for (let i = 0; i < DIRECT_AVAILABILITY_PATTERNS.length; i++) {
+        if (DIRECT_AVAILABILITY_PATTERNS[i].test(lower)) return true;
+    }
+
+    for (let i = 0; i < DATE_FORMAT_PATTERNS.length; i++) {
+        if (DATE_FORMAT_PATTERNS[i].test(lower)) return true;
+    }
+
+    for (let i = 0; i < CONTEXTUAL_AVAILABILITY_PATTERNS.length; i++) {
+        if (CONTEXTUAL_AVAILABILITY_PATTERNS[i].test(lower)) return true;
+    }
+
+    return false;
+}
 
 // ---------------------------------------------------------------------------
 // Route incoming image requests to the correct categories
@@ -305,45 +360,6 @@ app.get('/test-db', async (req, res) => {
 });
 // ────────────────────────────────────────────────────────────────────────────
 
-// ── Availability diagnostic route (TEMPORARY — remove after debugging) ───────
-app.get('/test-availability', async (req, res) => {
-    const { createClient } = require('@supabase/supabase-js');
-
-    // Use the same dedicated campmantap client as availability.js
-    const availClient = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_KEY,
-        { db: { schema: process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap' } }
-    );
-
-    const results = {
-        schema_used: process.env.SUPABASE_AVAILABILITY_SCHEMA || 'campmantap',
-        view_availability_public: {},
-        view_availability: {}
-    };
-
-    // Test view_availability_public
-    const { data: d1, error: e1 } = await availClient
-        .from('view_availability_public')
-        .select('*')
-        .limit(5);
-    results.view_availability_public = e1
-        ? { ok: false, error: e1.message, code: e1.code }
-        : { ok: true, rowCount: d1.length, columns: d1.length > 0 ? Object.keys(d1[0]) : [], sample: d1.slice(0, 2) };
-
-    // Test view_availability
-    const { data: d2, error: e2 } = await availClient
-        .from('view_availability')
-        .select('*')
-        .limit(5);
-    results.view_availability = e2
-        ? { ok: false, error: e2.message, code: e2.code }
-        : { ok: true, rowCount: d2.length, columns: d2.length > 0 ? Object.keys(d2[0]) : [], sample: d2.slice(0, 2) };
-
-    res.json(results);
-});
-// ─────────────────────────────────────────────────────────────────────────────
-
 // Home page
 app.get("/", (req, res) => {
     res.send("WhatsApp Webhook Server Running");
@@ -416,14 +432,86 @@ app.post("/webhook", async (req, res) => {
                 // Normalize early so we can detect intent before fetching data
                 const normalizedText = normalizeMessage(text);
 
-                // Run history fetch + availability fetch in parallel (saves ~200-400ms)
-                const looksLikeAvailability = isAvailabilityQuestion(normalizedText);
-                const [existingHistory, preloadedAvailability] = await Promise.all([
-                    getConversationHistory(sender),
-                    looksLikeAvailability ? getAvailabilityContext(normalizedText) : Promise.resolve(undefined)
-                ]);
+                // Fetch conversation history
+                const existingHistory = await getConversationHistory(sender);
 
                 const isNewCustomer = existingHistory.length === 0;
+
+                // Check if customer is asking about availability
+                if (isAvailabilityQuestion(normalizedText)) {
+                    console.log(`[Availability] Availability question detected from ${sender}. Sending booking websites directly.`);
+                    
+                    const availabilityMessage = `Hi! You can check campsite availability and make a booking directly through our official booking platforms:
+
+🌐 BookTapak:
+https://booktapak.com/property/campmantap?locale=en
+
+🌐 Escabee:
+https://escabee.com/campsites/camp-mantap
+
+---
+
+Hai! Anda boleh menyemak kekosongan tapak dan membuat tempahan secara terus melalui platform tempahan rasmi kami:
+
+🌐 BookTapak:
+https://booktapak.com/property/campmantap?locale=en
+
+🌐 Escabee:
+https://escabee.com/campsites/camp-mantap`;
+
+                    let finalMsg = availabilityMessage;
+                    if (isNewCustomer) {
+                        console.log("New customer detected — prepending welcome message to availability reply");
+                        finalMsg = `${WELCOME_MESSAGE}\n\n${availabilityMessage}`;
+                    }
+
+                    // Save conversation to Supabase so history is maintained
+                    const { error: dbError } = await supabase
+                        .from("conversations")
+                        .insert([
+                            {
+                                phone_number: sender,
+                                role: "user",
+                                message: text
+                            },
+                            {
+                                phone_number: sender,
+                                role: "assistant",
+                                message: finalMsg
+                            }
+                        ]);
+
+                    if (dbError) {
+                        console.error("=== SUPABASE INSERT ERROR (AVAILABILITY INTERCEPT) ===");
+                        console.error("Code:", dbError.code);
+                        console.error("Message:", dbError.message);
+                        console.error("=====================================================");
+                    } else {
+                        console.log("Supabase: availability conversation saved ✓");
+                    }
+
+                    // Send the message
+                    await axios.post(
+                        `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                        {
+                            messaging_product: "whatsapp",
+                            to: sender,
+                            type: "text",
+                            text: {
+                                body: finalMsg
+                            }
+                        },
+                        {
+                            headers: {
+                                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                                "Content-Type": "application/json"
+                            }
+                        }
+                    );
+
+                    console.log("Availability links sent directly");
+                    return res.sendStatus(200);
+                }
 
                 // Route image/pricing requests dynamically
                 const requestedImageType = getRequestedImageType(text);
@@ -442,8 +530,7 @@ app.post("/webhook", async (req, res) => {
                     aiReply = await getAIReply(
                         text,
                         sender,
-                        existingHistory,
-                        preloadedAvailability
+                        existingHistory
                     );
                 }
 
@@ -924,7 +1011,7 @@ function normalizeMessage(text) {
         .replace(/\br\b/gi, "are");
 }
 
-async function getAIReply(userMessage, phoneNumber, cachedHistory = null, preloadedAvailability = undefined) {
+async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
 
     // Expand informal abbreviations so the AI parses the intent correctly
     const normalizedMessage = normalizeMessage(userMessage);
@@ -935,16 +1022,6 @@ async function getAIReply(userMessage, phoneNumber, cachedHistory = null, preloa
     const history = cachedHistory !== null
         ? cachedHistory
         : await getConversationHistory(phoneNumber);
-
-    // Use pre-fetched availability if available, otherwise fetch now
-    const availabilityContext = preloadedAvailability !== undefined
-        ? preloadedAvailability
-        : await getAvailabilityContext(normalizedMessage);
-
-    // Build the availability section only when data was found
-    const availabilitySection = availabilityContext
-        ? `\n\n${availabilityContext}`
-        : "";
 
     // System prompt — narrative describing services, tasks, and constraints
     const systemPrompt = `You are a virtual WhatsApp assistant for Camp Mantap, a premium riverfront campsite nestled in the lush tropical valley of Bentong, Pahang (about 20-25 minutes drive from Bentong town). Our goal is to provide a refreshing, comfortable, and scenic nature escape for camping enthusiasts, family gatherings, and outdoor adventures.
@@ -967,11 +1044,9 @@ YOUR TASKS:
 1. Warmly greet guests, representing Camp Mantap with a helpful, polite, professional, and matter-of-fact tone.
 2. Reply in the customer's language (Malay or English).
 3. If the customer states a preferred name during the conversation, remember it and address them by that name exclusively.
-4. **Booking Availability**: If the customer asks about booking slots, available dates, or site availability, you MUST check the "LIVE BOOKING AVAILABILITY" section first:
-   - If the requested date(s) are listed as available, state that they are available and provide the details (site, price, etc.) listed. Do NOT state that they are unavailable or fully booked.
-   - If the requested date(s) are NOT listed in the live availability data, or if the live availability data is empty, politely explain that those specific dates are fully booked or unavailable, and guide them to check real-time availability or book via the official links.
+4. **Booking Availability**: If the customer asks about booking slots, available dates, or site availability, explain that they can check real-time availability and book online directly through our official booking platforms (BookTapak or Escabee). Provide the links for them.
 5. Answer other FAQs, rules, and campsite parameters using the Knowledge Base.
-6. If a question is not covered in the provided Knowledge Base or Availability Context, output EXACTLY our standard fallback message asking them to try again later or repeat the question in a clearer form.
+6. If a question is not covered in the provided Knowledge Base, output EXACTLY our standard fallback message asking them to try again later or repeat the question in a clearer form.
 
 WHATSAPP FORMATTING RULES (MUST follow strictly):
 - For bullet points and lists, ALWAYS use a dash (-) followed by a space. NEVER use asterisk (*) as a bullet point.
@@ -980,9 +1055,8 @@ WHATSAPP FORMATTING RULES (MUST follow strictly):
 - Do NOT mix * as both bullet AND bold in the same message. Use - for bullets and *text* for bold only.
 - Keep responses concise and well-spaced for easy reading on mobile.
 
-CRITICAL INSTRUCTION: Your responses MUST be strictly based ONLY on the system prompt narrative (about yourself/services), and the provided Knowledge Base and Availability Context below. 
+CRITICAL INSTRUCTION: Your responses MUST be strictly based ONLY on the system prompt narrative (about yourself/services), and the provided Knowledge Base below. 
 DO NOT make up any information, prices, policies, or facts. 
-If the customer asks about booking or date availability, prioritize the "LIVE BOOKING AVAILABILITY" section over general rules.
 If the customer asks who you are or what general services Camp Mantap provides, answer using the "ABOUT CAMP MANTAP SERVICES & FACILITIES" section from this system prompt. 
 For other specific questions, if the provided context does not contain the answer, you MUST NOT guess or use outside knowledge.
 
@@ -990,7 +1064,7 @@ LANGUAGE RULE: Detect the language used in the customer's message. If they write
 
 STRICT RULES for unanswerable questions — follow exactly based on the situation:
 
-RULE A — If the question is RELATED to Camp Mantap (e.g. about our packages, facilities, activities, pricing, policies, bookings, or anything about us) BUT the specific information is not available in the Knowledge Base or Availability Context, output EXACTLY the matching version below:
+RULE A — If the question is RELATED to Camp Mantap (e.g. about our packages, facilities, activities, pricing, policies, bookings, or anything about us) BUT the specific information is not available in the Knowledge Base, output EXACTLY the matching version below:
 
 [If customer wrote in English]:
 "Sorry, I'm unable to provide an answer to that question at the moment. 😔
@@ -1016,7 +1090,7 @@ Saya tidak dapat membantu dengan topik di luar Camp Mantap. Sila cuba lagi nanti
 
 === CAMP MANTAP OFFICIAL KNOWLEDGE BASE ===
 ${KNOWLEDGE_BASE}
-=== END OF KNOWLEDGE BASE ===${availabilitySection}`;
+=== END OF KNOWLEDGE BASE ===`;
 
     // Build messages array from conversation history
     const messages = [
