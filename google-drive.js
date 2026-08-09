@@ -92,10 +92,12 @@ async function listDriveImages(folderId) {
 
 // ---------------------------------------------------------------------------
 // driveImageUrl(fileId)
-// Builds a direct-view URL for a Drive file that WhatsApp can fetch.
+// Builds a direct-view URL for a Drive file that our server proxies.
 // ---------------------------------------------------------------------------
 function driveImageUrl(fileId) {
-    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const baseUrl = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
+    return `${baseUrl}/drive-image/${fileId}`;
 }
 
-module.exports = { listDriveImages, driveImageUrl };
+module.exports = { listDriveImages, driveImageUrl, getAuth };
+

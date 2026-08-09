@@ -21,7 +21,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
-const { listDriveImages, driveImageUrl } = require('./google-drive');
+const { listDriveImages, driveImageUrl, getAuth } = require('./google-drive');
+const { google } = require('googleapis');
 
 const GEMINI_MODEL = "gemini-3.5-flash";
 const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
@@ -405,6 +406,49 @@ app.get("/webhook", (req, res) => {
     return res.sendStatus(403);
 });
 
+// Proxy route to stream Google Drive images securely
+app.get('/drive-image/:fileId', async (req, res) => {
+    const { fileId } = req.params;
+    if (!fileId) {
+        return res.status(400).send('Missing fileId');
+    }
+
+    try {
+        const auth = getAuth();
+        const drive = google.drive({ version: 'v3', auth });
+
+        // 1. Get metadata to retrieve the MIME type and name
+        const metadata = await drive.files.get({
+            fileId,
+            fields: 'mimeType,name'
+        });
+
+        res.setHeader('Content-Type', metadata.data.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${metadata.data.name}"`);
+
+        // 2. Fetch the file content as a stream
+        const response = await drive.files.get(
+            { fileId, alt: 'media' },
+            { responseType: 'stream' }
+        );
+
+        response.data
+            .on('error', (err) => {
+                console.error(`[Drive Proxy] Stream error for file ${fileId}:`, err.message);
+                if (!res.headersSent) {
+                    res.status(500).send('Error streaming file');
+                }
+            })
+            .pipe(res);
+
+    } catch (err) {
+        console.error(`[Drive Proxy] Failed to fetch file ${fileId}:`, err.message);
+        if (!res.headersSent) {
+            res.status(500).send('Failed to fetch image from Google Drive');
+        }
+    }
+});
+
 // Deduplicate incoming messages — WhatsApp can send the same webhook more than once
 const processedMessageIds = new Set();
 
@@ -540,7 +584,7 @@ https://escabee.com/campsites/camp-mantap`;
                 const requestedImageType = getRequestedImageType(text);
                 if (requestedImageType) {
                     console.log(`[Images] Image request detected from ${sender} (Type: ${requestedImageType})`);
-                    await handleImageRequest(sender, requestedImageType);
+                    await handleImageRequest(sender, requestedImageType, text);
                     // Return early — images already sent, no text reply needed
                     return res.sendStatus(200);
                 }
@@ -752,7 +796,7 @@ async function sendImageMessage(to, imageUrl, caption = "") {
 // ---------------------------------------------------------------------------
 // Handle categorized image requests (English & Malay)
 // ---------------------------------------------------------------------------
-async function handleImageRequest(to, type) {
+async function handleImageRequest(to, type, text = "") {
     const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
     const imagesDir = path.join(__dirname, 'public', 'images');
 
