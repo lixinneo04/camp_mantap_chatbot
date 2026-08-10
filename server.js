@@ -251,11 +251,7 @@ A. Foto Tapak Perkhemahan (Tapak 1-9)
 B. Foto Kawasan Khemah (Camp A/B/C/D)
 C. Foto Sungai & Pemandangan
 D. Foto Aktiviti & Buah-buahan
-E. Polisi Video
 F. Kembali`,
-            answers: {
-                E: `🎥 *Polisi Video*\nMaaf, kami tidak dapat menghantar video melalui WhatsApp kerana saiz fail yang terlalu besar. 😔\n\nWalau bagaimanapun, kami mempunyai banyak *foto* menarik! Anda boleh melihatnya dengan memilih pilihan A, B, C, atau D dalam menu ini.`
-            }
         },
         availability: {
             prompt: `Berikut adalah platform tempahan kami untuk menyemak kekosongan dan tempahan secara terus:
