@@ -24,23 +24,12 @@ const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md")
 const { listDriveImages, driveImageUrl, getAuth } = require('./google-drive');
 const { google } = require('googleapis');
 
-const GEMINI_MODEL = "gemini-3.5-flash";
-const WELCOME_MESSAGE = `Salam & Welcome to Camp Mantap! 🏕️
+const WELCOME_MESSAGE = `Hello! Welcome to Camp Mantap. I am your virtual assistant. 🏕️ Hai! Selamat datang ke Camp Mantap. Saya pembantu maya anda. 🏕️
 
-Terima kasih kerana menghubungi kami. Thank you for reaching out!
+Please select your preferred language / Sila pilih bahasa pilihan anda:
+1. Bahasa Melayu 🇲🇾
+2. English 🇬🇧`;
 
-I'm the Camp Mantap virtual assistant. I can help you with:
-
-📍 Location & facilities
-📅 Booking & availability
-⏰ Check-in / check-out times
-💸 Cancellation & refund policy
-⚡ Electricity usage
-🛒 Mini mart items
-🏍️ ATV rides & activities
-🌊 River & flood safety info
-
-Feel free to ask me anything in English or Bahasa Melayu!`;
 const FALLBACK_MESSAGE = `Sorry, I'm having some technical difficulties right now. 😔
 
 Please try again later`;
@@ -54,6 +43,352 @@ Please try again later or repeat your question in a clearer form.
 Maaf, saya tidak dapat membantu dengan permintaan tersebut buat masa ini. 😔
 
 Sila cuba lagi nanti atau ulang soalan anda dengan lebih jelas.`;
+
+const MENUS = {
+    en: {
+        welcome: WELCOME_MESSAGE,
+        mainMenu: `How can I help you today? Please choose a topic below:
+1. ℹ️ General Info, Location & Facilities
+2. ⛺ Campsites & Pricing (Tapak)
+3. 🎪 Tent Rental Packages (Sewa Khemah)
+4. 🎯 Activities & Mini Mart
+5. 📜 Rules, Safety & Policies
+6. 📅 Booking & Registration
+7. 📸 Photos & Media
+8. 📅 Availability`,
+        
+        general: {
+            prompt: `What would you like to know about?
+A. Location & Directions
+B. Campsite Facilities
+C. Check-In & Check-Out Times
+D. Go Back`,
+            answers: {
+                A: `📍 *Location & Directions*\nCamp Mantap is located around 20-25 minutes drive from Bentong, Pahang. All our campsites face a beautiful river.`,
+                B: `⛺ *Campsite Facilities*\nWe provide:\n- 24-hour electricity plug points at each campsite (campers must bring own extension cables)\n- Individual firepits at each campsite\n- Toilets with water heaters (+soap) and washing areas\n- Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)\n- Surau and car parking close to tapak\n- WiFi (Celcom/Digi signal is best)\n- Guided ATV tours, archery, and other seasonal activities.`,
+                C: `⏰ *Check-In & Check-Out Times*\n- Official Check-In: 2:00 PM\n- Official Check-Out: 12:00 PM (noon)\n- Early Check-In: If the date before has no occupied camper at your chosen site (and there is no maintenance work), early check-in is usually possible after 10:30 AM. We will inform you of the earliest check-in time before your arrival day.\n- Late Check-Out: If there is no incoming booking scheduled for your site, check-out can be extended up to 4:00 PM.`
+            }
+        },
+        campsites: {
+            prompt: `Choose a campsite category to view pricing and details:
+A. Standard (Campsite 2, 3)
+B. Medium (Campsite 4, 6, 7, 8, 9)
+C. Family (Campsite 1, 5)
+D. Additional Pax & Tents Policy
+E. Go Back`,
+            answers: {
+                A: `⛺ *Standard Campsite*\n- Campsites: Campsite 2, Campsite 3\n- Camp Size: 7m x 10m\n- Pax Included in Price: 4 Pax\n- Max Pax: 6 Pax\n- Max Vehicles: 2\n- Pricing: *RM 100 / night*`,
+                B: `⛺ *Medium Campsite*\n- Campsites: Campsite 4, Campsite 6, Campsite 7, Campsite 8, Campsite 9\n- Camp Size: 8m x 11m\n- Pax Included in Price: 6 Pax\n- Max Pax: 8 Pax\n- Max Vehicles: 2\n- Pricing: *RM 130 / night*`,
+                C: `⛺ *Family Campsite*\n- Campsites: Campsite 1, Campsite 5\n- Camp Size: 10m x 13m\n- Pax Included in Price: 8 Pax\n- Max Pax: 10 Pax\n- Max Vehicles: 3\n- Pricing: *RM 160 / night*`,
+                D: `💵 *Additional Pax & Tents*\n- Additional Pax Charges: RM 50 / Pax\n- Infants (4 years old & below): FOC (Free of Charge)\n- Note: Tents in the pictures/gallery are for illustration purposes and size comparison only. Campers must bring their own tents unless renting a tent package.`
+            }
+        },
+        tents: {
+            prompt: `Select a tent rental package style (Campsite fee is NOT included):
+A. Style A - Payung Village L (Max 4 pax)
+B. Style B - Payung Village T (XL) (Max 8 pax)
+C. Style C - Dome Style (Max 8 pax)
+D. Included Amenities
+E. Go Back`,
+            answers: {
+                A: `🎪 *Style A — Payung Village L*\n- Max pax: 4 people\n- Harga 1 Malam:\n  - 1-2 orang: *RM 250.00*\n  - 3-4 orang: *RM 300.00*\n- Harga Malam Tambahan:\n  - 1-2 orang: *RM 200.00*\n  - 3-4 orang: *RM 250.00*`,
+                B: `🎪 *Style B — Payung Village T (XL)*\n- Max pax: 8 people\n- Harga 1 Malam:\n  - 1-4 orang: *RM 350.00*\n  - 5-8 orang: *RM 400.00*\n- Harga Malam Tambahan:\n  - 1-4 orang: *RM 300.00*\n  - 5-8 orang: *RM 350.00*`,
+                C: `🎪 *Style C — Dome Style*\n- Max pax: 8 people\n- Harga 1 Malam:\n  - 1-4 orang: *RM 400.00*\n  - 5-8 orang: *RM 500.00*\n- Harga Malam Tambahan:\n  - 1-4 orang: *RM 350.00*\n  - 5-8 orang: *RM 450.00*`,
+                D: `🎪 *Tent Rental Amenities*\nAll styles include:\n- Air Mattress / Foam\n- Foam Pillows\n- Fan & Light\n- Table & Chairs (Meja & Kerusi)\n*Note: Price does NOT include the campsite/tapak fee. Utensils are NOT included.*`
+            }
+        },
+        activities: {
+            prompt: `What would you like to know about activities?
+A. Guided ATV Tours
+B. Archery & Seasonal Fruits
+C. Self-Service Mini Mart
+D. Go Back`,
+            answers: {
+                A: `🏍️ *Guided ATV Tours*\n- Guided ATV tours only: 45 minutes duration.\n- Pricing: *RM 70.00 per car*\n- Weight limits: Max 90kg for 125cc ATVs, max 110kg for 180cc ATVs.`,
+                B: `🎯 *Archery & Seasonal Fruits*\n- Archery: Archery and other seasonal activities are available on-site.\n- Fresh Fruits: You can buy fresh seasonal fruits (e.g. durians) depending on the season/harvest!`,
+                C: `🛒 *Campsite Mini Mart*\n- We sell: Ice, Ice Cream, Can Drinks, Mineral Water, Snacks, Charcoal, Firewood, Gasoline, Batteries, etc.\n- Operation: Self-service / Layan Diri\n- Payment: Touch 'n Go or QR pay`
+            }
+        },
+        rules: {
+            prompt: `Please select a policy or safety topic:
+A. Cancellation & Refund Policy
+B. Rescheduling Policy
+C. Electricity Usage Policy
+D. River & Flood Safety
+E. Camper Van, Motorhome & RV Policy
+F. Go Back`,
+            answers: {
+                A: `📜 *Cancellation & Refund Policy*\n- More than 14 days before check-in: 100% Refund\n- 14 to 7 days before check-in: 50% Refund\n- Less than 7 days before check-in: NO Refund`,
+                B: `📜 *Rescheduling Policy*\n- Notice must be given more than 14 days before the check-in date.\n- The new date must be within 1 month of the original check-in date.`,
+                C: `⚡ *Electricity Usage Policy*\n- Electricity is suitable for basic usage such as phone charging, fan, hair dryer & rice cooker (below 1000 watts).\n- Do not use high-power appliances.\n- *NOT ALLOWED:* Charging EV (electric vehicle) cars.\n- *NOT ALLOWED:* Portable Power Stations.`,
+                D: `🌊 *River & Flood Safety*\n- During heavy rain, water levels can rise significantly (historical high of 7 feet).\n- The camp compound is built 10 feet above the riverbed, and water has not overflowed into our compound.\n- We have installed a warning siren system and monitor the river closely when it rains, even in the early hours.`,
+                E: `🚌 *Camper Van, Motorhome & RV Policy*\n- Camper vans, Motorhomes, and RVs are NOT recommended/suitable at Camp Mantap due to:\n  - Single-phase power supply limit (insufficient for large vehicle requirements).\n  - Narrow access roads, uneven terrain, and clearance challenges.\n  - Durian tree low clearance (risk of scratches/damage).\n  - Wet weather conditions.`
+            }
+        },
+        booking: {
+            prompt: `How would you like to proceed with booking?
+A. Online Booking Platforms
+B. Booking & Payment Policy
+C. Go Back`,
+            answers: {
+                A: `📅 *Online Booking Platforms*\nTo check availability and book online directly:\n- BookTapak: https://booktapak.com/property/campmantap?locale=en\n- Escabee: https://escabee.com/campsites/camp-mantap`,
+                B: `📜 *Booking & Payment Policy*\n- Full payment is required online to secure your campsite.\n- Check check-in/out times under General Info.\n- Cancellation & rescheduling policies can be viewed under Rules & Policies.`
+            }
+        },
+        photos: {
+            prompt: `Select a media category to view:
+A. Campsite Photos (Tapak 1-9)
+B. Camp Zone Photos (Camp A/B/C/D)
+C. River & Scenery Photos
+D. Activities & Fruit Photos
+E. Video Policy
+F. Go Back`,
+            answers: {
+                E: `🎥 *Video Policy*\nSorry, we are unable to send videos via WhatsApp as the file sizes are too large. 😔\n\nHowever, we do have plenty of *photos* available! You can view them by choosing the options A, B, C, or D in this menu.`
+            }
+        },
+        availability: {
+            prompt: `Here are our booking platforms to check real-time availability and make booking:
+- BookTapak: https://booktapak.com/property/campmantap?locale=en
+- Escabee: https://escabee.com/campsites/camp-mantap
+
+Reply 0 to go back to the Main Menu.`
+        }
+    },
+    bm: {
+        welcome: WELCOME_MESSAGE,
+        mainMenu: `Bagaimana saya boleh membantu anda hari ini? Sila pilih topik di bawah:
+1. ℹ️ Maklumat Am, Lokasi & Kemudahan
+2. ⛺ Tapak Perkhemahan & Harga (Tapak)
+3. 🎪 Pakej Sewa Khemah
+4. 🎯 Aktiviti & Mini Mart
+5. 📜 Peraturan, Keselamatan & Polisi
+6. 📅 Tempahan & Pendaftaran
+7. 📸 Foto & Media
+8. 📅 Semakan Kekosongan (Availability)`,
+        
+        general: {
+            prompt: `Apakah yang anda ingin ketahui?
+A. Lokasi & Arah Jalan
+B. Kemudahan Campsite
+C. Waktu Masuk & Keluar (Check-in/out)
+D. Kembali`,
+            answers: {
+                A: `📍 *Lokasi & Arah Jalan*\nCamp Mantap terletak dari pekan Bentong, Pahang sekitar 20-25 minit memandu. Semua Tapak di Campsite kami semua menghadap sungai.`,
+                B: `⛺ *Kemudahan Campsite*\nKami menyediakan:\n- Plug Point disediakan di setiap tapak perkhemahan (24 jam, bawa extension sendiri, kegunaan biasa bawah 1000W)\n- Firepit setiap tapak\n- Tandas + water heater (+sabun) & Washing area (+sabun)\n- Mini mart layan diri + kayu api ( Touch 'n Go atau QR pay)\n- Surau & Car park dekat tapak\n- WIFI disediakan (hanya celcom/digi ada signal)\n- Aktiviti ATV (RM 70 sekereta), memanah, dll.`,
+                C: `⏰ *Waktu Masuk & Keluar*\n- Check-In Rasmi: 2:00 Petang\n- Check-Out Rasmi: 12:00 Tengah Hari\n- Early Check-In: Jika tiada pelanggan pada hari sebelum di tapak anda (dan tiada maintenance), masuk awal dibenarkan selepas 10:30 Pagi. Kami akan maklumkan waktu masuk terawal sebelum hari ketibaan.\n- Late Check-Out: Jika tiada tempahan seterusnya, check-out boleh dilanjutkan sehingga 4:00 Petang.`
+            }
+        },
+        campsites: {
+            prompt: `Pilih kategori tapak perkhemahan untuk harga & butiran:
+A. Standard (Tapak 2, 3)
+B. Medium (Tapak 4, 6, 7, 8, 9)
+C. Family (Tapak 1, 5)
+D. Caj Pax Tambahan & Polisi Khemah
+E. Kembali`,
+            answers: {
+                A: `⛺ *Tapak Standard*\n- Tapak: Tapak 2, Tapak 3\n- Saiz: 7m x 10m\n- Pax Termasuk dalam Harga: 4 Pax\n- Maks Pax: 6 Pax\n- Maks Kenderaan: 2\n- Harga: *RM 100 / malam*`,
+                B: `⛺ *Tapak Medium*\n- Tapak: Tapak 4, Tapak 6, Tapak 7, Tapak 8, Tapak 9\n- Saiz: 8m x 11m\n- Pax Termasuk dalam Harga: 6 Pax\n- Maks Pax: 8 Pax\n- Maks Kenderaan: 2\n- Harga: *RM 130 / malam*`,
+                C: `⛺ *Tapak Family*\n- Tapak: Tapak 1, Tapak 5\n- Saiz: 10m x 13m\n- Pax Termasuk dalam Harga: 8 Pax\n- Maks Pax: 10 Pax\n- Maks Kenderaan: 3\n- Harga: *RM 160 / malam*`,
+                D: `💵 *Caj Pax Tambahan & Polisi Khemah*\n- Caj Pax Tambahan: RM 50 / Pax\n- Kanak-kanak (4 tahun & ke bawah): Percuma (FOC)\n- Nota: Khemah di dalam gambar adalah untuk ilustrasi & perbandingan saiz sahaja. Pelanggan perlu membawa khemah sendiri melainkan menempah pakej sewa.`
+            }
+        },
+        tents: {
+            prompt: `Pilih gaya pakej sewa khemah (Harga TIDAK termasuk tapak):
+A. Style A - Payung Village L (Maks 4 pax)
+B. Style B - Payung Village T (XL) (Maks 8 pax)
+C. Style C - Dome Style (Maks 8 pax)
+D. Kemudahan Disediakan
+E. Kembali`,
+            answers: {
+                A: `🎪 *Style A — Payung Village L*\n- Maks pax: 4 orang\n- Harga 1 Malam:\n  - 1-2 orang: *RM 250.00*\n  - 3-4 orang: *RM 300.00*\n- Harga Malam Tambahan:\n  - 1-2 orang: *RM 200.00*\n  - 3-4 orang: *RM 250.00*`,
+                B: `🎪 *Style B — Payung Village T (XL)*\n- Maks pax: 8 orang\n- Harga 1 Malam:\n  - 1-4 orang: *RM 350.00*\n  - 5-8 orang: *RM 400.00*\n- Harga Malam Tambahan:\n  - 1-4 orang: *RM 300.00*\n  - 5-8 orang: *RM 350.00*`,
+                C: `🎪 *Style C — Dome Style*\n- Maks pax: 8 orang\n- Harga 1 Malam:\n  - 1-4 orang: *RM 400.00*\n  - 5-8 orang: *RM 500.00*\n- Harga Malam Tambahan:\n  - 1-4 orang: *RM 350.00*\n  - 5-8 orang: *RM 450.00*`,
+                D: `🎪 *Butiran Sewa Khemah*\nSemua pakej sewa termasuk:\n- Tilam Angin / Tilam Foam\n- Bantal Foam\n- Kipas & Lampu\n- Meja & Kerusi\n*Nota: Harga tidak termasuk yuran tapak perkhemahan. Peralatan memasak TIDAK disediakan.*`
+            }
+        },
+        activities: {
+            prompt: `Apakah yang anda ingin tahu tentang aktiviti?
+A. Lawatan ATV Berpandu
+B. Memanah & Buah-buahan Musiman
+C. Mini Mart Layan Diri
+D. Kembali`,
+            answers: {
+                A: `🏍️ *Lawatan ATV Berpandu*\n- Pemanduan berpandu sahaja: 45 minit.\n- Harga: *RM 70.00 sekereta*\n- Had berat: Maks 90kg untuk ATV 125cc, maks 110kg untuk ATV 180cc.`,
+                B: `🎯 *Memanah & Buah-buahan*\n- Memanah: Aktiviti memanah dan aktiviti bermusim lain disediakan di tapak.\n- Buah Segar: Anda boleh beli buah segar (bergantung pada musim buah durian, dll)!`,
+                C: `🛒 *Mini Mart Layan Diri*\n- Kami menjual: Ais, Ais Krim, Air Tin, Air Mineral, Makanan Ringan, Arang, Kayu Api, Petrol, Bateri, dll.\n- Operasi: Layan Diri / Self-service\n- Bayaran: Touch 'n Go atau QR pay`
+            }
+        },
+        rules: {
+            prompt: `Sila pilih polisi atau topik keselamatan:
+A. Polisi Pembatalan & Pemulangan Wang (Refund)
+B. Polisi Penjadualan Semula (Rescheduling)
+C. Polisi Penggunaan Elektrik
+D. Keselamatan Sungai & Banjir
+E. Polisi Camper Van, Motorhome & RV
+F. Kembali`,
+            answers: {
+                A: `📜 *Polisi Pembatalan & Refund*\n- Lebih 14 hari sebelum check-in: 100% Refund\n- 14 hingga 7 hari sebelum check-in: 50% Refund\n- Kurang 7 hari sebelum check-in: TIADA Refund`,
+                B: `📜 *Polisi Rescheduling*\n- Notis mesti diberikan lebih 14 hari sebelum check-in.\n- Tarikh baru mesti dalam tempoh 1 bulan dari tarikh check-in asal.`,
+                C: `⚡ *Polisi Penggunaan Elektrik*\n- Kuasa sesuai untuk cas telefon, kipas, pengering rambut & periuk nasi (bawah 1000W).\n- *TIDAK DIBENARKAN:* Mengecas kereta elektrik (EV).\n- *TIDAK DIBENARKAN:* Menggunakan Portable Power Station.`,
+                D: `🌊 *Keselamatan Sungai & Banjir*\n- Semasa hujan lebat, paras air akan meningkat. Rekod tertinggi adalah 7 kaki.\n- Kawasan kem dibina 10 kaki di atas paras sungai, jadi air tidak melimpah ke kawasan kami.\n- Siren amaran dipasang dan sungai dipantau rapat apabila hujan lebat.`,
+                E: `🚌 *Polisi Camper Van, Motorhome & RV*\n- Camper van, Motorhome, dan RV adalah TIDAK disyorkan/sesuai di Camp Mantap kerana:\n  - Had bekalan elektrik fasa tunggal.\n  - Jalan masuk sempit dan mencabar.\n  - Dahan pokok durian rendah (risiko calar/rosak).\n  - Keadaan cuaca basah.`
+            }
+        },
+        booking: {
+            prompt: `Bagaimanakah anda ingin meneruskan tempahan?
+A. Platform Tempahan Dalam Talian
+B. Polisi Tempahan & Bayaran
+C. Kembali`,
+            answers: {
+                A: `📅 *Platform Tempahan Dalam Talian*\nUntuk semak kekosongan dan tempahan terus:\n- BookTapak: https://booktapak.com/property/campmantap?locale=en\n- Escabee: https://escabee.com/campsites/camp-mantap`,
+                B: `📜 *Polisi Tempahan & Bayaran*\n- Bayaran penuh diperlukan secara atas talian untuk mengesahkan tapak.\n- Sila semak waktu check-in/out di bawah Maklumat Am.\n- Polisi pembatalan/penjadualan boleh disemak di bawah Peraturan & Polisi.`
+            }
+        },
+        photos: {
+            prompt: `Pilih kategori media untuk melihat gambar:
+A. Foto Tapak Perkhemahan (Tapak 1-9)
+B. Foto Kawasan Khemah (Camp A/B/C/D)
+C. Foto Sungai & Pemandangan
+D. Foto Aktiviti & Buah-buahan
+E. Polisi Video
+F. Kembali`,
+            answers: {
+                E: `🎥 *Polisi Video*\nMaaf, kami tidak dapat menghantar video melalui WhatsApp kerana saiz fail yang terlalu besar. 😔\n\nWalau bagaimanapun, kami mempunyai banyak *foto* menarik! Anda boleh melihatnya dengan memilih pilihan A, B, C, atau D dalam menu ini.`
+            }
+        },
+        availability: {
+            prompt: `Berikut adalah platform tempahan kami untuk menyemak kekosongan dan tempahan secara terus:
+- BookTapak: https://booktapak.com/property/campmantap?locale=en
+- Escabee: https://escabee.com/campsites/camp-mantap
+
+Taip 0 untuk kembali ke Menu Utama.`
+        }
+    }
+};
+
+function getChatState(history) {
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role !== 'assistant') continue;
+        const msg = history[i].message;
+
+        // Level 0 Welcome
+        if (msg.includes("Please select your preferred language") || msg.includes("Sila pilih bahasa pilihan anda")) {
+            return { level: 0, lang: null, menu: null };
+        }
+
+        // Level 1 Main Menu
+        if (msg.includes("How can I help you today? Please choose a topic below:") || msg.includes("Bagaimana saya boleh membantu anda hari ini? Sila pilih topik di bawah:")) {
+            const isEn = msg.includes("How can I help you today?");
+            return { level: 1, lang: isEn ? 'en' : 'bm', menu: null };
+        }
+
+        // Level 2 Sub-menus
+        // 1. General Info
+        if (msg.includes("What would you like to know about?") && msg.includes("Location & Directions")) {
+            return { level: 2, lang: 'en', menu: 'general' };
+        }
+        if (msg.includes("Apakah yang anda ingin ketahui?") && msg.includes("Lokasi & Arah Jalan")) {
+            return { level: 2, lang: 'bm', menu: 'general' };
+        }
+
+        // 2. Campsites & Pricing
+        if (msg.includes("Choose a campsite category to view pricing") && msg.includes("Standard")) {
+            return { level: 2, lang: 'en', menu: 'campsites' };
+        }
+        if (msg.includes("Pilih kategori tapak perkhemahan untuk harga") && msg.includes("Standard")) {
+            return { level: 2, lang: 'bm', menu: 'campsites' };
+        }
+
+        // 3. Tent Rental
+        if (msg.includes("Select a tent rental package style") && msg.includes("Payung Village L")) {
+            return { level: 2, lang: 'en', menu: 'tents' };
+        }
+        if (msg.includes("Pilih gaya pakej sewa khemah") && msg.includes("Payung Village L")) {
+            return { level: 2, lang: 'bm', menu: 'tents' };
+        }
+
+        // 4. Activities & Mini Mart
+        if (msg.includes("What would you like to know about activities?") && msg.includes("Guided ATV Tours")) {
+            return { level: 2, lang: 'en', menu: 'activities' };
+        }
+        if (msg.includes("Apakah yang anda ingin tahu tentang aktiviti?") && msg.includes("Lawatan ATV Berpandu")) {
+            return { level: 2, lang: 'bm', menu: 'activities' };
+        }
+
+        // 5. Rules, Safety & Policies
+        if (msg.includes("Please select a policy or safety topic:") && msg.includes("Cancellation")) {
+            return { level: 2, lang: 'en', menu: 'rules' };
+        }
+        if (msg.includes("Sila pilih polisi atau topik keselamatan:") && msg.includes("Pembatalan")) {
+            return { level: 2, lang: 'bm', menu: 'rules' };
+        }
+
+        // 6. Booking & Registration
+        if (msg.includes("How would you like to proceed with booking?") && msg.includes("Online Booking Platforms")) {
+            return { level: 2, lang: 'en', menu: 'booking' };
+        }
+        if (msg.includes("Bagaimanakah anda ingin meneruskan tempahan?") && msg.includes("Platform Tempahan Dalam Talian")) {
+            return { level: 2, lang: 'bm', menu: 'booking' };
+        }
+
+        // 7. Photos & Media
+        if (msg.includes("Select a media category to view:") && msg.includes("Campsite Photos")) {
+            return { level: 2, lang: 'en', menu: 'photos' };
+        }
+        if (msg.includes("Pilih kategori media untuk melihat gambar:") && msg.includes("Foto Tapak Perkhemahan")) {
+            return { level: 2, lang: 'bm', menu: 'photos' };
+        }
+
+        // 8. Availability
+        if (msg.includes("Here are our booking platforms to check real-time availability:") || msg.includes("Berikut adalah platform tempahan kami untuk menyemak kekosongan")) {
+            const isEn = msg.includes("Here are our booking platforms");
+            return { level: 2, lang: isEn ? 'en' : 'bm', menu: 'availability' };
+        }
+    }
+
+    return { level: 0, lang: null, menu: null };
+}
+
+function isGoBackCommand(input, menu) {
+    const cleaned = input.trim().toLowerCase();
+    if (cleaned === '0' || cleaned === '00' || cleaned === 'back' || cleaned === 'kembali' || cleaned === 'menu' || cleaned === 'main') {
+        return true;
+    }
+    
+    const goBackLetters = {
+        general: 'd',
+        campsites: 'e',
+        tents: 'e',
+        activities: 'd',
+        rules: 'f',
+        booking: 'c',
+        photos: 'f',
+        availability: '0'
+    };
+
+    return goBackLetters[menu] === cleaned;
+}
+
+function isRequestingHuman(text) {
+    const lower = text.toLowerCase();
+    const patterns = [
+        /\b(talk|speak|chat|connect|contact|reach|get)\s+(to|with)\s+(a\s+)?(human|person|agent|staff|owner|someone|real\s*person)\b/i,
+        /\b(talk|speak|chat|connect|reach|call|message)\s+(to|with)\s+(miss\s*jenny|jenny)\b/i,
+        /\bcontact\s+(miss\s*jenny|jenny)\b/i,
+        /\b(i\s+want|i'd\s+like|can\s+i|may\s+i|please)\s+(to\s+)?(talk|speak|chat|connect)\s+(to|with)\b/i,
+        /\bconnect\s+me\s+to\s+(a[n]?\s+)?(human|person|agent|staff|someone)\b/i,
+        /\b(transfer|escalate|forward)\s+(me\s+)?(to\s+)?(human|person|agent|miss\s*jenny|jenny)\b/i,
+        /\bperson[\s-]?in[\s-]?charge\b/i,
+        /\bpic\b/i,
+        /\b(need|want)\s+to\s+(talk|speak|chat|contact|reach|call)\s+(to\s+|with\s+)?(miss\s*jenny|jenny)\b/i,
+        /\b(nak|mahu|boleh|saya\s+nak)\s+(cakap|bercakap|hubungi|contact|jumpa)\s+(dengan\s+)?(miss\s*jenny|jenny|owner|tuan|puan|orang)\b/i,
+        /\b(cakap|bercakap)\s+dengan\s+(manusia|orang\s+sebenar|staff|pekerja)\b/i,
+        /\bhubungi\s+(miss\s*jenny|jenny|owner)\b/i,
+        /\borang\s+yang\s+bertanggungjawab\b/i,
+    ];
+    return patterns.some(p => p.test(lower));
+}
 
 // ---------------------------------------------------------------------------
 // Detect availability queries
@@ -455,10 +790,9 @@ const processedMessageIds = new Set();
 // Incoming WhatsApp messages
 app.post("/webhook", async (req, res) => {
     try {
-        const value =
-            req.body.entry?.[0]?.changes?.[0]?.value;
+        const value = req.body.entry?.[0]?.changes?.[0]?.value;
 
-        // Silently ignore delivery/read receipts — they are very noisy
+        // Silently ignore delivery/read receipts
         if (value?.statuses) {
             return res.sendStatus(200);
         }
@@ -468,8 +802,8 @@ app.post("/webhook", async (req, res) => {
             const sender = message.from;
             const text = message.text?.body;
 
-            // Skip stale messages (older than 30 seconds) — e.g. queued messages from server downtime
-            const msgTimestamp = parseInt(message.timestamp) * 1000; // convert to ms
+            // Skip stale messages (older than 30 seconds)
+            const msgTimestamp = parseInt(message.timestamp) * 1000;
             const ageSeconds = (Date.now() - msgTimestamp) / 1000;
             if (ageSeconds > 30) {
                 console.log(`Skipping old message from ${sender} (${Math.round(ageSeconds)}s ago)`);
@@ -487,127 +821,114 @@ app.post("/webhook", async (req, res) => {
                 return res.sendStatus(200);
             }
             processedMessageIds.add(message.id);
-            // Clean up old IDs after 5 minutes to prevent memory leak
             setTimeout(() => processedMessageIds.delete(message.id), 5 * 60 * 1000);
 
             console.log("Customer:", sender);
             console.log("Message:", text);
 
-            let aiReply;
+            let replyMsg;
 
             try {
-                // Normalize early so we can detect intent before fetching data
-                const normalizedText = normalizeMessage(text);
-
                 // Fetch conversation history
                 const existingHistory = await getConversationHistory(sender);
-
                 const isNewCustomer = existingHistory.length === 0;
 
-                // Check if customer is asking about availability
-                if (isAvailabilityQuestion(normalizedText)) {
-                    console.log(`[Availability] Availability question detected from ${sender}. Sending booking websites directly.`);
-                    
-                    const availabilityMessage = `Hi! You can check campsite availability and make a booking directly through our official booking platforms:
-
-🌐 BookTapak:
-https://booktapak.com/property/campmantap?locale=en
-
-🌐 Escabee:
-https://escabee.com/campsites/camp-mantap
-
----
-
-Hai! Anda boleh menyemak kekosongan tapak dan membuat tempahan secara terus melalui platform tempahan rasmi kami:
-
-🌐 BookTapak:
-https://booktapak.com/property/campmantap?locale=en
-
-🌐 Escabee:
-https://escabee.com/campsites/camp-mantap`;
-
-                    let finalMsg = availabilityMessage;
-                    if (isNewCustomer) {
-                        console.log("New customer detected — prepending welcome message to availability reply");
-                        finalMsg = `${WELCOME_MESSAGE}\n\n${availabilityMessage}`;
-                    }
-
-                    // Save conversation to Supabase so history is maintained
-                    const { error: dbError } = await supabase
-                        .from("conversations")
-                        .insert([
-                            {
-                                phone_number: sender,
-                                role: "user",
-                                message: text
-                            },
-                            {
-                                phone_number: sender,
-                                role: "assistant",
-                                message: finalMsg
-                            }
-                        ]);
-
-                    if (dbError) {
-                        console.error("=== SUPABASE INSERT ERROR (AVAILABILITY INTERCEPT) ===");
-                        console.error("Code:", dbError.code);
-                        console.error("Message:", dbError.message);
-                        console.error("=====================================================");
-                    } else {
-                        console.log("Supabase: availability conversation saved ✓");
-                    }
-
-                    // Send the message
-                    await axios.post(
-                        `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
-                        {
-                            messaging_product: "whatsapp",
-                            to: sender,
-                            type: "text",
-                            text: {
-                                body: finalMsg
-                            }
-                        },
-                        {
-                            headers: {
-                                Authorization: `Bearer ${ACCESS_TOKEN}`,
-                                "Content-Type": "application/json"
-                            }
-                        }
-                    );
-
-                    console.log("Availability links sent directly");
-                    return res.sendStatus(200);
-                }
-
-                // Route image/pricing requests dynamically
-                const requestedImageType = getRequestedImageType(text);
-                if (requestedImageType) {
-                    console.log(`[Images] Image request detected from ${sender} (Type: ${requestedImageType})`);
-                    await handleImageRequest(sender, requestedImageType, text);
-                    // Return early — images already sent, no text reply needed
-                    return res.sendStatus(200);
-                }
-
-                // Check if customer is exclusively requesting to speak to a human
+                // Check for human handoff first
                 if (isRequestingHuman(text)) {
                     console.log(`[Handoff] Human contact request detected from ${sender}`);
-                    aiReply = HUMAN_HANDOFF_MESSAGE;
+                    replyMsg = HUMAN_HANDOFF_MESSAGE;
                 } else {
-                    aiReply = await getAIReply(
-                        text,
-                        sender,
-                        existingHistory
-                    );
+                    // Resolve state from history
+                    const state = getChatState(existingHistory);
+                    const normalizedInput = text.trim().toLowerCase();
+
+                    if (isNewCustomer || state.level === 0) {
+                        // Level 0: Welcome & Language Selection
+                        if (normalizedInput === '1' || normalizedInput.includes('melayu') || normalizedInput.includes('bm') || normalizedInput.includes('malay')) {
+                            replyMsg = MENUS.bm.mainMenu;
+                        } else if (normalizedInput === '2' || normalizedInput.includes('english') || normalizedInput.includes('eng') || normalizedInput.includes('en')) {
+                            replyMsg = MENUS.en.mainMenu;
+                        } else {
+                            replyMsg = WELCOME_MESSAGE;
+                        }
+                    } else if (state.level === 1) {
+                        // Level 1: Main Menu Option Choices (1 to 8)
+                        const lang = state.lang || 'en';
+                        if (normalizedInput === '1') {
+                            replyMsg = MENUS[lang].general.prompt;
+                        } else if (normalizedInput === '2') {
+                            replyMsg = MENUS[lang].campsites.prompt;
+                        } else if (normalizedInput === '3') {
+                            replyMsg = MENUS[lang].tents.prompt;
+                        } else if (normalizedInput === '4') {
+                            replyMsg = MENUS[lang].activities.prompt;
+                        } else if (normalizedInput === '5') {
+                            replyMsg = MENUS[lang].rules.prompt;
+                        } else if (normalizedInput === '6') {
+                            replyMsg = MENUS[lang].booking.prompt;
+                        } else if (normalizedInput === '7') {
+                            replyMsg = MENUS[lang].photos.prompt;
+                        } else if (normalizedInput === '8') {
+                            replyMsg = MENUS[lang].availability.prompt;
+                        } else {
+                            const invalidLabel = lang === 'bm'
+                                ? 'Pilihan tidak sah. Sila pilih nombor dari 1 hingga 8:'
+                                : 'Invalid option. Please choose a number from 1 to 8:';
+                            replyMsg = `${invalidLabel}\n\n${MENUS[lang].mainMenu}`;
+                        }
+                    } else if (state.level === 2) {
+                        // Level 2: Submenus and Responses
+                        const lang = state.lang || 'en';
+                        const menu = state.menu || 'general';
+
+                        if (isGoBackCommand(text, menu)) {
+                            replyMsg = MENUS[lang].mainMenu;
+                        } else {
+                            const subMenuObj = MENUS[lang][menu];
+                            const optionKey = text.trim().toUpperCase();
+
+                            if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
+                                const answer = subMenuObj.answers[optionKey];
+                                replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
+                            } else if (menu === 'photos' && ['A', 'B', 'C', 'D'].includes(optionKey)) {
+                                const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv' };
+                                const type = imageTypeMap[optionKey];
+
+                                // Save user message to Supabase so history is maintained
+                                await supabase.from("conversations").insert([{ phone_number: sender, role: "user", message: text }]);
+                                
+                                console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
+                                
+                                if (optionKey === 'D') {
+                                    await handleImageRequest(sender, 'atv', text);
+                                    await new Promise(r => setTimeout(r, 800));
+                                    await handleImageRequest(sender, 'archery', text);
+                                    await new Promise(r => setTimeout(r, 800));
+                                    await handleImageRequest(sender, 'durian', text);
+                                } else {
+                                    await handleImageRequest(sender, type, text);
+                                }
+
+                                await new Promise(r => setTimeout(r, 1500));
+                                replyMsg = subMenuObj.prompt;
+                            } else {
+                                const invalidLabel = lang === 'bm'
+                                    ? 'Pilihan tidak sah. Sila pilih salah satu pilihan daripada menu di bawah:'
+                                    : 'Invalid option. Please choose one of the options below:';
+                                
+                                if (menu === 'availability') {
+                                    replyMsg = MENUS[lang].mainMenu;
+                                } else {
+                                    replyMsg = `${invalidLabel}\n\n${subMenuObj ? subMenuObj.prompt : MENUS[lang].mainMenu}`;
+                                }
+                            }
+                        }
+                    } else {
+                        replyMsg = WELCOME_MESSAGE;
+                    }
                 }
 
-                // If new customer, prepend welcome message so it is sent as one single message bubble
-                let finalReply = aiReply;
-                if (isNewCustomer) {
-                    console.log("New customer detected — prepending welcome message");
-                    finalReply = `${WELCOME_MESSAGE}\n\n${aiReply}`;
-                }
-
+                // Save conversation to Supabase
                 const { error: dbError } = await supabase
                     .from("conversations")
                     .insert([
@@ -619,7 +940,7 @@ https://escabee.com/campsites/camp-mantap`;
                         {
                             phone_number: sender,
                             role: "assistant",
-                            message: finalReply
+                            message: replyMsg
                         }
                     ]);
 
@@ -627,13 +948,12 @@ https://escabee.com/campsites/camp-mantap`;
                     console.error("=== SUPABASE INSERT ERROR ===");
                     console.error("Code:", dbError.code);
                     console.error("Message:", dbError.message);
-                    console.error("Details:", dbError.details);
-                    console.error("Hint:", dbError.hint);
                     console.error("============================");
                 } else {
                     console.log("Supabase: conversation saved ✓");
                 }
 
+                // Send the reply message via WhatsApp
                 await axios.post(
                     `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
                     {
@@ -641,7 +961,7 @@ https://escabee.com/campsites/camp-mantap`;
                         to: sender,
                         type: "text",
                         text: {
-                            body: finalReply
+                            body: replyMsg
                         }
                     },
                     {
@@ -655,15 +975,11 @@ https://escabee.com/campsites/camp-mantap`;
                 console.log("Reply sent");
 
             } catch (err) {
-                // Log full error details for debugging
-                console.error("=== AI REPLY ERROR ===");
-                console.error("Status:", err?.status || err?.response?.status);
+                console.error("=== WEBHOOK MESSAGE PROCESS ERROR ===");
                 console.error("Message:", err?.message);
-                console.error("Body:", JSON.stringify(err?.response?.data || err?.error, null, 2));
-                console.error("======================");
+                console.error("=====================================");
 
-                // Save fallback conversation to Supabase so history is maintained
-                const { error: dbError } = await supabase
+                await supabase
                     .from("conversations")
                     .insert([
                         {
@@ -678,28 +994,12 @@ https://escabee.com/campsites/camp-mantap`;
                         }
                     ]);
 
-                if (dbError) {
-                    console.error("=== SUPABASE INSERT ERROR (FALLBACK) ===");
-                    console.error("Code:", dbError.code);
-                    console.error("Message:", dbError.message);
-                    console.error("Details:", dbError.details);
-                    console.error("Hint:", dbError.hint);
-                    console.error("========================================");
-                } else {
-                    console.log("Supabase: fallback conversation saved ✓");
-                }
-
-                // Send fallback message so customer isn't left hanging
                 try {
-                    await sendTextMessage(
-                        sender,
-                        FALLBACK_MESSAGE
-                    );
+                    await sendTextMessage(sender, FALLBACK_MESSAGE);
                 } catch (sendErr) {
                     console.error("Failed to send fallback message:", sendErr.message);
                 }
 
-                // Alert admin about the error
                 const alertNumber = process.env.ALERT_PHONE_NUMBER;
                 if (alertNumber) {
                     try {
@@ -723,9 +1023,7 @@ https://escabee.com/campsites/camp-mantap`;
         res.sendStatus(200);
 
     } catch (err) {
-        console.error(
-            err.response?.data || err.message
-        );
+        console.error(err.response?.data || err.message);
         res.sendStatus(500);
     }
 });
@@ -1295,6 +1593,10 @@ ${KNOWLEDGE_BASE}
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+} else {
+    module.exports = { MENUS, getChatState, isGoBackCommand, isRequestingHuman };
+}
