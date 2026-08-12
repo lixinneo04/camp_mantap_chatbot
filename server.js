@@ -263,6 +263,51 @@ Taip 0 untuk kembali ke Menu Utama.`
     }
 };
 
+// ---------------------------------------------------------------------------
+// Session management — language cache & inactivity tracking
+// ---------------------------------------------------------------------------
+
+/** How long of a silence (ms) before the next message restarts AI-first mode. */
+const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * In-memory language cache.  Survives within the current server process;
+ * resets on restart (which correctly triggers AI-first for every user again).
+ * { phoneNumber → 'en' | 'bm' }
+ */
+const langCache = new Map();
+
+function getCachedLang(phoneNumber) {
+    return langCache.get(phoneNumber) || null;
+}
+
+function setCachedLang(phoneNumber, lang) {
+    langCache.set(phoneNumber, lang);
+}
+
+/**
+ * Returns true if this is a "first message" — either:
+ *   - No conversation history exists (brand-new customer), OR
+ *   - More than SESSION_TTL_MS has elapsed since the last DB row.
+ * Uses the DB timestamp so it survives server restarts.
+ */
+function isInactiveSession(history) {
+    if (!history || history.length === 0) return true;
+    const lastMsg = history[history.length - 1];
+    if (!lastMsg.created_at) return false; // can't determine; assume active
+    const lastActivityMs = new Date(lastMsg.created_at).getTime();
+    return (Date.now() - lastActivityMs) > SESSION_TTL_MS;
+}
+
+/**
+ * Returns the main FAQ menu string for the given language.
+ * Always appended to AI replies so customers see their options.
+ */
+function buildFaqMenu(lang) {
+    const safeLang = (lang === 'en') ? 'en' : 'bm';
+    return MENUS[safeLang].mainMenu;
+}
+
 function getChatState(history) {
     for (let i = history.length - 1; i >= 0; i--) {
         if (history[i].role !== 'assistant') continue;
@@ -827,29 +872,37 @@ app.post("/webhook", async (req, res) => {
             try {
                 // Fetch conversation history
                 const existingHistory = await getConversationHistory(sender);
-                const isNewCustomer = existingHistory.length === 0;
 
-                // Check for human handoff first
+                // ── 1. Human handoff check (highest priority) ─────────────────────────
                 if (isRequestingHuman(text)) {
                     console.log(`[Handoff] Human contact request detected from ${sender}`);
                     replyMsg = HUMAN_HANDOFF_MESSAGE;
                 } else {
-                    // Resolve state from history
-                    const state = getChatState(existingHistory);
                     const normalizedInput = text.trim().toLowerCase();
+                    const state = getChatState(existingHistory);
 
-                    if (isNewCustomer || state.level === 0) {
-                        // Level 0: Welcome & Language Selection
-                        if (normalizedInput === '1' || normalizedInput.includes('melayu') || normalizedInput.includes('bm') || normalizedInput.includes('malay')) {
-                            replyMsg = MENUS.bm.mainMenu;
-                        } else if (normalizedInput === '2' || normalizedInput.includes('english') || normalizedInput.includes('eng') || normalizedInput.includes('en')) {
-                            replyMsg = MENUS.en.mainMenu;
-                        } else {
-                            replyMsg = WELCOME_MESSAGE;
-                        }
+                    // Effective language: in-memory cache → history-detected → default BM
+                    const sessionLang = getCachedLang(sender) || state.lang || 'bm';
+
+                    // ── 2. First-message / re-entry check ────────────────────────────────
+                    // Triggers AI-first mode when:
+                    //   a) Brand-new customer (no history), OR
+                    //   b) Customer has been silent for > 1 hour.
+                    const firstMsg = isInactiveSession(existingHistory);
+
+                    if (firstMsg) {
+                        // ── AI-FIRST MODE ───────────────────────────────────────────────
+                        // Gemini answers the question naturally, detects EN/BM, then we
+                        // append the FAQ main menu so the customer can drill deeper.
+                        console.log(`[Flow] AI-first mode for ${sender} (new/inactive session)`);
+                        const aiResult = await getAIReply(text, sender, existingHistory, true);
+                        const detectedLang = aiResult.lang || 'bm';
+                        setCachedLang(sender, detectedLang);
+                        replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
+
                     } else if (state.level === 1) {
-                        // Level 1: Main Menu Option Choices (1 to 8)
-                        const lang = state.lang || 'en';
+                        // ── MAIN MENU: numbered option picks (1–8) ───────────────────────
+                        const lang = state.lang || sessionLang;
                         if (normalizedInput === '1') {
                             replyMsg = MENUS[lang].general.prompt;
                         } else if (normalizedInput === '2') {
@@ -867,14 +920,15 @@ app.post("/webhook", async (req, res) => {
                         } else if (normalizedInput === '8') {
                             replyMsg = MENUS[lang].availability.prompt;
                         } else {
-                            const invalidLabel = lang === 'bm'
-                                ? 'Pilihan tidak sah. Sila pilih nombor dari 1 hingga 8:'
-                                : 'Invalid option. Please choose a number from 1 to 8:';
-                            replyMsg = `${invalidLabel}\n\n${MENUS[lang].mainMenu}`;
+                            // Free-text at main menu level → AI answers + FAQ menu
+                            console.log(`[Flow] Free-text at main menu for ${sender} → AI`);
+                            const aiText = await getAIReply(text, sender, existingHistory);
+                            replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                         }
+
                     } else if (state.level === 2) {
-                        // Level 2: Submenus and Responses
-                        const lang = state.lang || 'en';
+                        // ── SUB-MENU: lettered option picks ──────────────────────────────
+                        const lang = state.lang || sessionLang;
                         const menu = state.menu || 'general';
 
                         if (isGoBackCommand(text, menu)) {
@@ -884,17 +938,14 @@ app.post("/webhook", async (req, res) => {
                             const optionKey = text.trim().toUpperCase();
 
                             if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
+                                // Valid lettered pick → show answer then repeat the sub-menu
                                 const answer = subMenuObj.answers[optionKey];
                                 replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
                             } else if (menu === 'photos' && ['A', 'B', 'C', 'D'].includes(optionKey)) {
                                 const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv' };
                                 const type = imageTypeMap[optionKey];
-
-                                // Save user message to Supabase so history is maintained
-                                await supabase.from("conversations").insert([{ phone_number: sender, role: "user", message: text }]);
-                                
                                 console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
-                                
+
                                 if (optionKey === 'D') {
                                     await handleImageRequest(sender, 'atv', text);
                                     await new Promise(r => setTimeout(r, 800));
@@ -908,19 +959,20 @@ app.post("/webhook", async (req, res) => {
                                 await new Promise(r => setTimeout(r, 1500));
                                 replyMsg = subMenuObj.prompt;
                             } else {
-                                const invalidLabel = lang === 'bm'
-                                    ? 'Pilihan tidak sah. Sila pilih salah satu pilihan daripada menu di bawah:'
-                                    : 'Invalid option. Please choose one of the options below:';
-                                
-                                if (menu === 'availability') {
-                                    replyMsg = MENUS[lang].mainMenu;
-                                } else {
-                                    replyMsg = `${invalidLabel}\n\n${subMenuObj ? subMenuObj.prompt : MENUS[lang].mainMenu}`;
-                                }
+                                // Free-text or unrecognised option at sub-menu → AI + FAQ menu
+                                console.log(`[Flow] Free-text at sub-menu for ${sender} → AI`);
+                                const aiText = await getAIReply(text, sender, existingHistory);
+                                replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                             }
                         }
+
                     } else {
-                        replyMsg = WELCOME_MESSAGE;
+                        // ── NO STATE / UNKNOWN — treat as a fresh first message ───────────
+                        console.log(`[Flow] No prior state for ${sender} → AI-first fallback`);
+                        const aiResult = await getAIReply(text, sender, existingHistory, true);
+                        const detectedLang = aiResult.lang || 'bm';
+                        setCachedLang(sender, detectedLang);
+                        replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
                     }
                 }
 
@@ -1442,7 +1494,7 @@ function normalizeMessage(text) {
         .replace(/\br\b/gi, "are");
 }
 
-async function getAIReply(userMessage, phoneNumber, cachedHistory = null) {
+async function getAIReply(userMessage, phoneNumber, cachedHistory = null, detectLang = false) {
 
     // Expand informal abbreviations so the AI parses the intent correctly
     const normalizedMessage = normalizeMessage(userMessage);
@@ -1554,9 +1606,15 @@ ${KNOWLEDGE_BASE}
         geminiHistory.shift();
     }
 
+    // When detectLang=true, append a language-detection instruction so the AI
+    // reveals whether the customer wrote in EN or BM on their first message.
+    const langDetectAddendum = detectLang
+        ? `\n\nLANGUAGE DETECTION (mandatory for this response only):\nAnalyse the language of the customer's message.\nAt the very end of your response — on a completely new line by itself — write EXACTLY one of the following (no text after it):\nLANG:en\nLANG:bm\nUse LANG:en ONLY if the customer clearly wrote in English. Use LANG:bm for Bahasa Melayu, mixed language, or any ambiguous/undetectable language.`
+        : '';
+
     const model = genAI.getGenerativeModel({
         model: GEMINI_MODEL,
-        systemInstruction: systemPrompt
+        systemInstruction: systemPrompt + langDetectAddendum
     });
 
     let result;
@@ -1584,7 +1642,32 @@ ${KNOWLEDGE_BASE}
         }
     }
 
-    return result.response.text();
+    const rawText = result.response.text();
+
+    if (detectLang) {
+        // Parse and strip the LANG: tag appended by the AI to detect language
+        let aiText = rawText;
+        let detectedLang = 'bm'; // safe default: BM
+
+        // Primary: LANG: line at the very end (with optional trailing whitespace)
+        const langMatch = aiText.match(/(\r?\n)(LANG:(en|bm))\s*$/i);
+        if (langMatch) {
+            detectedLang = langMatch[3].toLowerCase();
+            aiText = aiText.slice(0, langMatch.index).trim();
+        } else {
+            // Fallback: inspect the last line of the response
+            const lines = aiText.trimEnd().split('\n');
+            const lastLine = lines[lines.length - 1].trim();
+            if (/^LANG:en$/i.test(lastLine)) { detectedLang = 'en'; lines.pop(); }
+            else if (/^LANG:bm$/i.test(lastLine)) { detectedLang = 'bm'; lines.pop(); }
+            aiText = lines.join('\n').trim();
+        }
+
+        console.log(`[LangDetect] Detected: ${detectedLang} for ${phoneNumber}`);
+        return { text: aiText, lang: detectedLang };
+    }
+
+    return rawText;
 }
 
 const PORT = process.env.PORT || 3000;
