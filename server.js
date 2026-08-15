@@ -17,6 +17,7 @@ const path = require("path");
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
