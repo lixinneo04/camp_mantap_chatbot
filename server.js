@@ -17,12 +17,12 @@ const path = require("path");
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
-const { listDriveImages, driveImageUrl, getAuth } = require('./google-drive');
+const { listDriveImages, listDriveSubfolders, driveImageUrl, getAuth } = require('./google-drive');
 const { google } = require('googleapis');
 
 const WELCOME_MESSAGE = `Hello! Welcome to Camp Mantap. I am your virtual assistant. 🏕️ Hai! Selamat datang ke Camp Mantap. Saya pembantu maya anda. 🏕️
@@ -57,15 +57,16 @@ const MENUS = {
 6. 📅 Booking & Registration
 7. 📸 Photos & Media
 8. 📅 Availability`,
-        
+
         general: {
             prompt: `What would you like to know about?
-A. Location & Directions
+A. Location
 B. Campsite Facilities
 C. Check-In & Check-Out Times
-D. Go Back`,
+D. Map
+E. Go Back`,
             answers: {
-                A: `📍 *Location & Directions*\nCamp Mantap is located around 20-25 minutes drive from Bentong, Pahang. All our campsites face a beautiful river.`,
+                A: `📍 *Location*\nCamp Mantap is located in Bentong, Pahang, Malaysia.\n\nAll our campsites face a beautiful river. 🌊\n\n🗺️ Get Directions:\nhttps://maps.app.goo.gl/2tZKaTBiupzDLjRy5`,
                 B: `⛺ *Campsite Facilities*\nWe provide:\n- 24-hour electricity plug points at each campsite (campers must bring own extension cables)\n- Individual firepits at each campsite\n- Toilets with water heaters (+soap) and washing areas\n- Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)\n- Surau and car parking close to tapak\n- WiFi (Celcom/Digi signal is best)\n- Guided ATV tours, archery, and other seasonal activities.`,
                 C: `⏰ *Check-In & Check-Out Times*\n- Official Check-In: 2:00 PM\n- Official Check-Out: 12:00 PM (noon)\n- Early Check-In: If the date before has no occupied camper at your chosen site (and there is no maintenance work), early check-in is usually possible after 10:30 AM. We will inform you of the earliest check-in time before your arrival day.\n- Late Check-Out: If there is no incoming booking scheduled for your site, check-out can be extended up to 4:00 PM.`
             }
@@ -139,7 +140,7 @@ C. Go Back`,
         photos: {
             prompt: `Select a media category to view:
 A. Campsite Photos (Tapak 1-9)
-B. Camp Zone Photos (Camp A/B/C/D)
+B. Camp Type Photos (Style A/B/C)
 C. River & Scenery Photos
 D. Activities & Fruit Photos
 E. Video Policy
@@ -167,15 +168,16 @@ Reply 0 to go back to the Main Menu.`
 6. 📅 Tempahan & Pendaftaran
 7. 📸 Foto & Media
 8. 📅 Semakan Kekosongan (Availability)`,
-        
+
         general: {
             prompt: `Apakah yang anda ingin ketahui?
-A. Lokasi & Arah Jalan
+A. Lokasi
 B. Kemudahan Campsite
 C. Waktu Masuk & Keluar (Check-in/out)
-D. Kembali`,
+D. Peta
+E. Kembali`,
             answers: {
-                A: `📍 *Lokasi & Arah Jalan*\nCamp Mantap terletak dari pekan Bentong, Pahang sekitar 20-25 minit memandu. Semua Tapak di Campsite kami semua menghadap sungai.`,
+                A: `📍 *Lokasi*\nCamp Mantap terletak di Bentong, Pahang, Malaysia.\n\nSemua tapak perkhemahan kami menghadap sungai. 🌊\n\n🗺️ Dapatkan Arah Jalan:\nhttps://maps.app.goo.gl/2tZKaTBiupzDLjRy5`,
                 B: `⛺ *Kemudahan Campsite*\nKami menyediakan:\n- Plug Point disediakan di setiap tapak perkhemahan (24 jam, bawa extension sendiri, kegunaan biasa bawah 1000W)\n- Firepit setiap tapak\n- Tandas + water heater (+sabun) & Washing area (+sabun)\n- Mini mart layan diri + kayu api ( Touch 'n Go atau QR pay)\n- Surau & Car park dekat tapak\n- WIFI disediakan (hanya celcom/digi ada signal)\n- Aktiviti ATV (RM 70 sekereta), memanah, dll.`,
                 C: `⏰ *Waktu Masuk & Keluar*\n- Check-In Rasmi: 2:00 Petang\n- Check-Out Rasmi: 12:00 Tengah Hari\n- Early Check-In: Jika tiada pelanggan pada hari sebelum di tapak anda (dan tiada maintenance), masuk awal dibenarkan selepas 10:30 Pagi. Kami akan maklumkan waktu masuk terawal sebelum hari ketibaan.\n- Late Check-Out: Jika tiada tempahan seterusnya, check-out boleh dilanjutkan sehingga 4:00 Petang.`
             }
@@ -249,7 +251,7 @@ C. Kembali`,
         photos: {
             prompt: `Pilih kategori media untuk melihat gambar:
 A. Foto Tapak Perkhemahan (Tapak 1-9)
-B. Foto Kawasan Khemah (Camp A/B/C/D)
+B. Foto Jenis Khemah (Style A/B/C)
 C. Foto Sungai & Pemandangan
 D. Foto Aktiviti & Buah-buahan
 F. Kembali`,
@@ -327,10 +329,10 @@ function getChatState(history) {
 
         // Level 2 Sub-menus
         // 1. General Info
-        if (msg.includes("What would you like to know about?") && msg.includes("Location & Directions")) {
+        if (msg.includes("What would you like to know about?") && msg.includes("Location")) {
             return { level: 2, lang: 'en', menu: 'general' };
         }
-        if (msg.includes("Apakah yang anda ingin ketahui?") && msg.includes("Lokasi & Arah Jalan")) {
+        if (msg.includes("Apakah yang anda ingin ketahui?") && msg.includes("Lokasi")) {
             return { level: 2, lang: 'bm', menu: 'general' };
         }
 
@@ -397,9 +399,9 @@ function isGoBackCommand(input, menu) {
     if (cleaned === '0' || cleaned === '00' || cleaned === 'back' || cleaned === 'kembali' || cleaned === 'menu' || cleaned === 'main') {
         return true;
     }
-    
+
     const goBackLetters = {
-        general: 'd',
+        general: 'e',
         campsites: 'e',
         tents: 'e',
         activities: 'd',
@@ -453,7 +455,7 @@ const CONTEXTUAL_AVAILABILITY_PATTERNS = [
     /\b(?:still\s+got|got\s+(?:space|slot|site|spot|room))\b/i,
     // English: camp intent
     /\b(?:can|want|plan)\s+(?:we|i)?\s*camp\b/i,
-    
+
     // Malay: combinations of inquiry/status + slot terms
     /\b(?:ada|kosong|penuh|full|boleh|nak|check|semak|bila|masih)\s+(?:[a-z]+\s+)?(?:tempat|slot|tapak|ruang|tarikh|hari)s?\b/i,
     // Malay: specific availability indicators
@@ -942,6 +944,12 @@ app.post("/webhook", async (req, res) => {
                                 // Valid lettered pick → show answer then repeat the sub-menu
                                 const answer = subMenuObj.answers[optionKey];
                                 replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
+                            } else if (menu === 'general' && optionKey === 'D') {
+                                // Map image from public/images/misc/
+                                console.log(`[Images Menu] Sending map image to ${sender}`);
+                                await handleImageRequest(sender, 'map', text);
+                                await new Promise(r => setTimeout(r, 1000));
+                                replyMsg = subMenuObj.prompt;
                             } else if (menu === 'photos' && ['A', 'B', 'C', 'D'].includes(optionKey)) {
                                 const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv' };
                                 const type = imageTypeMap[optionKey];
@@ -1243,26 +1251,41 @@ async function handleImageRequest(to, type, text = "") {
         }
     }
     else if (type === 'camp') {
-        const campFiles = imageFiles.filter(f => f.toLowerCase().startsWith('camp ') && !f.toLowerCase().includes('pricelist'));
-        if (campFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no camp layout photos are available at the moment. 😔\nMaaf, tiada gambar kawasan perkhemahan (Camp) disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_CAMPTYPE;
+        if (!folderId) {
+            await sendTextMessage(to, "Sorry, camp type photos are not available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
+            return;
+        }
+
+        // List Style A / B / C subfolders inside GDRIVE_CAMPTYPE
+        const styleSubfolders = await listDriveSubfolders(folderId);
+
+        if (styleSubfolders.length === 0) {
+            await sendTextMessage(to, "Sorry, no camp type photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
             return;
         }
 
         await sendTextMessage(to,
-            `Here are our camp zone photos (Camp A/B/C/D)! 📸🏕️\nBerikut adalah foto kawasan perkhemahan kami (Camp A/B/C/D)! 📸🏕️\n\n` +
-                            `Total: ${campFiles.length} photos / foto`
+            `Here are our camp type photos (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto jenis khemah kami (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f`
         );
 
-        for (let i = 0; i < campFiles.length; i++) {
-            const filename = campFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            const caption = filename.replace(/\.[^.]+$/, '');
-            console.log(`[Images] Sending camp photo ${i + 1}/${campFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, caption);
-            if (i < campFiles.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+        for (const folder of styleSubfolders) {
+            const folderImages = await listDriveImages(folder.id);
+            if (folderImages.length === 0) continue;
+
+            // Label header for each style
+            await sendTextMessage(to, `\ud83d\udcc2 *${folder.name}* \u2014 ${folderImages.length} photo(s) / foto`);
+
+            for (let i = 0; i < folderImages.length; i++) {
+                const f = folderImages[i];
+                const imageUrl = driveImageUrl(f.id);
+                const caption = `\ud83c\udfd5\ufe0f ${folder.name} \u2014 ${f.name}`;
+                console.log(`[Drive] Sending camp type photo ${i + 1}/${folderImages.length} from "${folder.name}": ${f.name}`);
+                await sendImageMessage(to, imageUrl, caption);
+                if (i < folderImages.length - 1) await new Promise(r => setTimeout(r, 500));
             }
+
+            await new Promise(r => setTimeout(r, 800)); // pause between styles
         }
     }
     else if (type === 'archery') {
@@ -1436,6 +1459,27 @@ async function handleImageRequest(to, type, text = "") {
             console.log(`[Drive] Sending ingredients budget file ${i + 1}/${allFiles.length}: ${f.name}`);
             await sendImageMessage(to, imageUrl, `🛒 Ingredients Budget — ${f.name}`);
             if (i < allFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    else if (type === 'map') {
+        const miscDir = path.join(__dirname, 'public', 'images', 'misc');
+        let miscFiles = [];
+        try {
+            miscFiles = fs.readdirSync(miscDir).filter(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
+        } catch (e) {
+            // misc folder doesn't exist yet
+        }
+        const mapFiles = miscFiles.filter(f => /map/i.test(f));
+        if (mapFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, the map is not available at the moment. \ud83d\ude14\nMaaf, peta tidak tersedia buat masa ini.");
+            return;
+        }
+        for (let i = 0; i < mapFiles.length; i++) {
+            const filename = mapFiles[i];
+            const imageUrl = `${BASE_URL}/images/misc/${encodeURIComponent(filename)}`;
+            console.log(`[Images] Sending map image ${i + 1}/${mapFiles.length}: ${filename}`);
+            await sendImageMessage(to, imageUrl, '\ud83d\uddfa\ufe0f Camp Mantap \u2014 Map / Peta');
+            if (i < mapFiles.length - 1) await new Promise(r => setTimeout(r, 500));
         }
     }
     else if (type === 'ask') {

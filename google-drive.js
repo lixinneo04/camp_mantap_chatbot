@@ -43,6 +43,7 @@ function getAuth() {
 // In-memory cache — { folderId: { data: [...], expiresAt: timestamp } }
 // ---------------------------------------------------------------------------
 const cache = {};
+const folderCache = {};
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,41 @@ async function listDriveImages(folderId) {
 }
 
 // ---------------------------------------------------------------------------
+// listDriveSubfolders(folderId)
+// Returns an array of { id, name } objects for immediate child FOLDERS.
+// Results are cached for 60 seconds.
+// ---------------------------------------------------------------------------
+async function listDriveSubfolders(folderId) {
+    if (!folderId) return [];
+
+    const cached = folderCache[folderId];
+    if (cached && Date.now() < cached.expiresAt) {
+        return cached.data;
+    }
+
+    try {
+        const auth = getAuth();
+        const drive = google.drive({ version: 'v3', auth });
+
+        const response = await drive.files.list({
+            q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+            orderBy: 'name',
+            pageSize: 50,
+        });
+
+        const folders = (response.data.files || []).map(f => ({ id: f.id, name: f.name }));
+        folderCache[folderId] = { data: folders, expiresAt: Date.now() + CACHE_TTL_MS };
+        console.log(`[Drive] Found ${folders.length} subfolder(s) in folder ${folderId.slice(-8)}`);
+        return folders;
+
+    } catch (err) {
+        console.error(`[Drive] Failed to list subfolders of ${folderId?.slice(-8)}:`, err.message);
+        return [];
+    }
+}
+
+// ---------------------------------------------------------------------------
 // driveImageUrl(fileId)
 // Builds a direct-view URL for a Drive file that our server proxies.
 // ---------------------------------------------------------------------------
@@ -99,5 +135,5 @@ function driveImageUrl(fileId) {
     return `${baseUrl}/drive-image/${fileId}`;
 }
 
-module.exports = { listDriveImages, driveImageUrl, getAuth };
+module.exports = { listDriveImages, listDriveSubfolders, driveImageUrl, getAuth };
 
