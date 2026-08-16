@@ -22,7 +22,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 const fs = require("fs");
 const KNOWLEDGE_BASE = fs.readFileSync(path.join(__dirname, "knowledge_base.md"), "utf8");
 
-const { listDriveImages, listDriveSubfolders, driveImageUrl, getAuth } = require('./google-drive');
+const { listDriveImages, listDriveVideos, listDriveSubfolders, driveImageUrl, getAuth } = require('./google-drive');
 const { google } = require('googleapis');
 
 const WELCOME_MESSAGE = `Hello! Welcome to Camp Mantap. I am your virtual assistant. 🏕️ Hai! Selamat datang ke Camp Mantap. Saya pembantu maya anda. 🏕️
@@ -143,11 +143,9 @@ A. Campsite Photos (Tapak 1-9)
 B. Camp Type Photos (Style A/B/C)
 C. River & Scenery Photos
 D. Activities & Fruit Photos
-E. Video Policy
+E. Videos
 F. Go Back`,
-            answers: {
-                E: `🎥 *Video Policy*\nSorry, we are unable to send videos via WhatsApp as the file sizes are too large. 😔\n\nHowever, we do have plenty of *photos* available! You can view them by choosing the options A, B, C, or D in this menu.`
-            }
+            answers: {}
         },
         availability: {
             prompt: `Here are our booking platforms to check real-time availability and make booking:
@@ -254,6 +252,7 @@ A. Foto Tapak Perkhemahan (Tapak 1-9)
 B. Foto Jenis Khemah (Style A/B/C)
 C. Foto Sungai & Pemandangan
 D. Foto Aktiviti & Buah-buahan
+E. Video
 F. Kembali`,
         },
         availability: {
@@ -950,8 +949,8 @@ app.post("/webhook", async (req, res) => {
                                 await handleImageRequest(sender, 'map', text);
                                 await new Promise(r => setTimeout(r, 1000));
                                 replyMsg = subMenuObj.prompt;
-                            } else if (menu === 'photos' && ['A', 'B', 'C', 'D'].includes(optionKey)) {
-                                const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv' };
+                            } else if (menu === 'photos' && ['A', 'B', 'C', 'D', 'E'].includes(optionKey)) {
+                                const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv', 'E': 'video' };
                                 const type = imageTypeMap[optionKey];
                                 console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
 
@@ -961,6 +960,8 @@ app.post("/webhook", async (req, res) => {
                                     await handleImageRequest(sender, 'archery', text);
                                     await new Promise(r => setTimeout(r, 800));
                                     await handleImageRequest(sender, 'durian', text);
+                                } else if (optionKey === 'E') {
+                                    await handleVideoRequest(sender, text);
                                 } else {
                                     await handleImageRequest(sender, type, text);
                                 }
@@ -1146,6 +1147,65 @@ async function sendImageMessage(to, imageUrl, caption = "") {
             }
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// Send a single video via WhatsApp
+// ---------------------------------------------------------------------------
+async function sendVideoMessage(to, videoUrl, caption = "") {
+    await axios.post(
+        `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
+        {
+            messaging_product: "whatsapp",
+            to,
+            type: "video",
+            video: {
+                link: videoUrl,
+                caption
+            }
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json"
+            }
+        }
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Handle video requests from Google Drive
+// ---------------------------------------------------------------------------
+async function handleVideoRequest(to, text = "") {
+    const folderId = process.env.GDRIVE_VIDEO;
+    if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+        await sendTextMessage(to, "Sorry, no videos are available at the moment. \ud83d\ude14\nMaaf, tiada video disediakan buat masa ini.");
+        return;
+    }
+
+    // Check for a subfolder named 'video' inside the parent folder
+    const subfolders = await listDriveSubfolders(folderId);
+    const videoSubfolder = subfolders.find(f => /^video$/i.test(f.name));
+    const targetFolderId = videoSubfolder ? videoSubfolder.id : folderId;
+
+    const videos = await listDriveVideos(targetFolderId);
+    if (videos.length === 0) {
+        await sendTextMessage(to, "Sorry, no videos are available at the moment. \ud83d\ude14\nMaaf, tiada video disediakan buat masa ini.");
+        return;
+    }
+
+    await sendTextMessage(to,
+        `Here are our Camp Mantap videos! \ud83c\udfd5\ufe0f\ud83c\udfac\nBerikut adalah video Camp Mantap kami! \ud83c\udfd5\ufe0f\ud83c\udfac\n\nTotal: ${videos.length} video(s)`
+    );
+
+    for (let i = 0; i < videos.length; i++) {
+        const v = videos[i];
+        const videoUrl = driveImageUrl(v.id); // reuses same /drive-image/ proxy
+        const caption = v.name.replace(/\.[^.]+$/, ''); // strip extension for caption
+        console.log(`[Drive] Sending video ${i + 1}/${videos.length}: ${v.name}`);
+        await sendVideoMessage(to, videoUrl, caption);
+        if (i < videos.length - 1) await new Promise(r => setTimeout(r, 1000));
+    }
 }
 
 // ---------------------------------------------------------------------------

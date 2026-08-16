@@ -135,5 +135,39 @@ function driveImageUrl(fileId) {
     return `${baseUrl}/drive-image/${fileId}`;
 }
 
-module.exports = { listDriveImages, listDriveSubfolders, driveImageUrl, getAuth };
+// ---------------------------------------------------------------------------
+// listDriveVideos(folderId)
+// Returns an array of { id, name } objects for video files in a folder.
+// Results are cached for 60 seconds.
+// ---------------------------------------------------------------------------
+const videoCache = {};
+async function listDriveVideos(folderId) {
+    if (!folderId) return [];
+
+    const cached = videoCache[folderId];
+    if (cached && Date.now() < cached.expiresAt) {
+        return cached.data;
+    }
+
+    try {
+        const auth = getAuth();
+        const drive = google.drive({ version: 'v3', auth });
+
+        const response = await drive.files.list({
+            q: `'${folderId}' in parents and mimeType contains 'video/' and trashed = false`,
+            fields: 'files(id, name)',
+            orderBy: 'name',
+            pageSize: 50,
+        });
+
+        const files = response.data.files || [];
+        videoCache[folderId] = { data: files, expiresAt: Date.now() + 60_000 };
+        return files;
+    } catch (err) {
+        console.error(`[Drive] Failed to list videos in ${folderId?.slice(-8)}:`, err.message);
+        return [];
+    }
+}
+
+module.exports = { listDriveImages, listDriveVideos, listDriveSubfolders, driveImageUrl, getAuth };
 
