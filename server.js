@@ -800,6 +800,54 @@ app.get("/webhook", (req, res) => {
     return res.sendStatus(403);
 });
 
+// ── Google Drive diagnostic route ────────────────────────────────────────────
+app.get('/test-drive', async (req, res) => {
+    const folders = {
+        GDRIVE_CAMPSITE:                      process.env.GDRIVE_CAMPSITE,
+        GDRIVE_CAMPTYPE:                      process.env.GDRIVE_CAMPTYPE,
+        GDRIVE_ACTIVITY:                      process.env.GDRIVE_ACTIVITY,
+        GDRIVE_PRICE:                         process.env.GDRIVE_PRICE,
+        GDRIVE_VIDEO:                         process.env.GDRIVE_VIDEO,
+        GDRIVE_MISC:                          process.env.GDRIVE_MISC,
+        GDRIVE_SCENERY:                       process.env.GDRIVE_SCENERY,
+        GDRIVE_FOLDER_PAYMENT_RETURN_RECORDS: process.env.GDRIVE_FOLDER_PAYMENT_RETURN_RECORDS,
+        GDRIVE_FOLDER_INGREDIENTS_BUDGET:     process.env.GDRIVE_FOLDER_INGREDIENTS_BUDGET,
+    };
+
+    const results = {};
+    for (const [key, folderId] of Object.entries(folders)) {
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            results[key] = { status: 'NOT_SET' };
+            continue;
+        }
+        try {
+            const auth = getAuth();
+            const drive = google.drive({ version: 'v3', auth });
+            const r = await drive.files.list({
+                q: `'${folderId.trim()}' in parents and trashed = false`,
+                fields: 'files(id, name, mimeType)',
+                pageSize: 50,
+            });
+            const files = r.data.files || [];
+            const images = files.filter(f => f.mimeType.startsWith('image/'));
+            const videos = files.filter(f => f.mimeType.startsWith('video/'));
+            const subfolders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+            results[key] = {
+                status: 'OK',
+                folderId: folderId.trim(),
+                totalItems: files.length,
+                images: images.length,
+                videos: videos.length,
+                subfolders: subfolders.map(f => f.name),
+            };
+        } catch (err) {
+            results[key] = { status: 'ERROR', folderId: folderId.trim(), error: err.message };
+        }
+    }
+    res.json(results);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Proxy route to stream Google Drive files (images & videos) securely
 // Supports HTTP Range requests so WhatsApp can stream videos properly.
 app.get('/drive-image/:fileId', async (req, res) => {
