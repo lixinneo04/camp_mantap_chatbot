@@ -1366,11 +1366,21 @@ async function handleVideoRequest(to, text = "") {
 
     for (let i = 0; i < videos.length; i++) {
         const v = videos[i];
-        const videoUrl = driveImageUrl(v.id); // reuses same /drive-image/ proxy
-        const caption = v.name.replace(/\.[^.]+$/, ''); // strip extension for caption
+        const caption = v.name.replace(/\.[^.]+$/, ''); // strip extension
+        // Use direct Google Drive download URL — WhatsApp fetches from Google's
+        // CDN directly, avoiding the double-hop through our Railway proxy.
+        // NOTE: The video file must be shared as "Anyone with the link" on Drive.
+        const directUrl = `https://drive.google.com/uc?export=download&id=${v.id}`;
+        const viewUrl   = `https://drive.google.com/file/d/${v.id}/view`;
+
         console.log(`[Drive] Sending video ${i + 1}/${videos.length}: ${v.name}`);
-        await sendVideoMessage(to, videoUrl, caption);
-        if (i < videos.length - 1) await new Promise(r => setTimeout(r, 1000));
+        try {
+            await sendVideoMessage(to, directUrl, caption);
+        } catch (err) {
+            // If WhatsApp rejects the link, send the shareable view link as text
+            console.warn(`[Drive] Video message failed (${err.message}), sending link instead`);
+            await sendTextMessage(to, `🎬 *${caption}*\n${viewUrl}`);
+        }
     }
 }
 
