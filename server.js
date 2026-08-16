@@ -1085,7 +1085,7 @@ app.post("/webhook", async (req, res) => {
                                     await new Promise(r => setTimeout(r, 800));
                                     await handleImageRequest(sender, 'durian', text);
                                 } else if (optionKey === 'E') {
-                                    await handleVideoRequest(sender, text);
+                                    await handleVideoRequest(sender, lang);
                                 } else {
                                     await handleImageRequest(sender, type, text);
                                 }
@@ -1342,10 +1342,13 @@ async function sendPricePoster(to, styleLetter) {
 // ---------------------------------------------------------------------------
 // Handle video requests from Google Drive
 // ---------------------------------------------------------------------------
-async function handleVideoRequest(to, text = "") {
+async function handleVideoRequest(to, lang = 'en') {
     const folderId = process.env.GDRIVE_VIDEO;
     if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
-        await sendTextMessage(to, "Sorry, no videos are available at the moment. 😔\nMaaf, tiada video disediakan buat masa ini.");
+        const msg = lang === 'bm'
+            ? 'Maaf, tiada video disediakan buat masa ini. 😔'
+            : 'Sorry, no videos are available at the moment. 😔';
+        await sendTextMessage(to, msg);
         return;
     }
 
@@ -1357,14 +1360,15 @@ async function handleVideoRequest(to, text = "") {
     // Send the folder link directly — customer taps to open Google Drive
     const folderLink = `https://drive.google.com/drive/folders/${targetFolderId}`;
 
-    await sendTextMessage(to,
-        `🎬 *Camp Mantap Videos*\n` +
-        `Tap the link below to view our camp videos on Google Drive:\n` +
-        `📂 ${folderLink}\n\n` +
-        `🎬 *Video Camp Mantap*\n` +
-        `Tekan pautan di bawah untuk tonton video kami di Google Drive:\n` +
-        `📂 ${folderLink}`
-    );
+    const msg = lang === 'bm'
+        ? `🎬 *Video Camp Mantap*
+Tekan pautan di bawah untuk tonton video kami di Google Drive:
+📂 ${folderLink}`
+        : `🎬 *Camp Mantap Videos*
+Tap the link below to view our camp videos on Google Drive:
+📂 ${folderLink}`;
+
+    await sendTextMessage(to, msg);
 }
 
 // ---------------------------------------------------------------------------
