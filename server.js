@@ -1345,7 +1345,7 @@ async function sendPricePoster(to, styleLetter) {
 async function handleVideoRequest(to, text = "") {
     const folderId = process.env.GDRIVE_VIDEO;
     if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
-        await sendTextMessage(to, "Sorry, no videos are available at the moment. \ud83d\ude14\nMaaf, tiada video disediakan buat masa ini.");
+        await sendTextMessage(to, "Sorry, no videos are available at the moment. 😔\nMaaf, tiada video disediakan buat masa ini.");
         return;
     }
 
@@ -1354,34 +1354,17 @@ async function handleVideoRequest(to, text = "") {
     const videoSubfolder = subfolders.find(f => /^video$/i.test(f.name));
     const targetFolderId = videoSubfolder ? videoSubfolder.id : folderId;
 
-    const videos = await listDriveVideos(targetFolderId);
-    if (videos.length === 0) {
-        await sendTextMessage(to, "Sorry, no videos are available at the moment. \ud83d\ude14\nMaaf, tiada video disediakan buat masa ini.");
-        return;
-    }
+    // Send the folder link directly — customer taps to open Google Drive
+    const folderLink = `https://drive.google.com/drive/folders/${targetFolderId}`;
 
     await sendTextMessage(to,
-        `Here are our Camp Mantap videos! \ud83c\udfd5\ufe0f\ud83c\udfac\nBerikut adalah video Camp Mantap kami! \ud83c\udfd5\ufe0f\ud83c\udfac\n\nTotal: ${videos.length} video(s)`
+        `🎬 *Camp Mantap Videos*\n` +
+        `Tap the link below to view our camp videos on Google Drive:\n` +
+        `📂 ${folderLink}\n\n` +
+        `🎬 *Video Camp Mantap*\n` +
+        `Tekan pautan di bawah untuk tonton video kami di Google Drive:\n` +
+        `📂 ${folderLink}`
     );
-
-    for (let i = 0; i < videos.length; i++) {
-        const v = videos[i];
-        const caption = v.name.replace(/\.[^.]+$/, ''); // strip extension
-        // Use direct Google Drive download URL — WhatsApp fetches from Google's
-        // CDN directly, avoiding the double-hop through our Railway proxy.
-        // NOTE: The video file must be shared as "Anyone with the link" on Drive.
-        const directUrl = `https://drive.google.com/uc?export=download&id=${v.id}`;
-        const viewUrl   = `https://drive.google.com/file/d/${v.id}/view`;
-
-        console.log(`[Drive] Sending video ${i + 1}/${videos.length}: ${v.name}`);
-        try {
-            await sendVideoMessage(to, directUrl, caption);
-        } catch (err) {
-            // If WhatsApp rejects the link, send the shareable view link as text
-            console.warn(`[Drive] Video message failed (${err.message}), sending link instead`);
-            await sendTextMessage(to, `🎬 *${caption}*\n${viewUrl}`);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
