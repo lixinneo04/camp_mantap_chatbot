@@ -63,7 +63,7 @@ const MENUS = {
 A. Location
 B. Campsite Facilities
 C. Check-In & Check-Out Times
-D. Map
+D. Camp Layout
 E. Go Back`,
             answers: {
                 A: `📍 *Location*\nCamp Mantap is located in Bentong, Pahang, Malaysia.\n\nAll our campsites face a beautiful river. 🌊\n\n🗺️ Get Directions:\nhttps://maps.app.goo.gl/2tZKaTBiupzDLjRy5`,
@@ -174,7 +174,7 @@ Reply 0 to go back to the Main Menu.`
 A. Lokasi
 B. Kemudahan Campsite
 C. Waktu Masuk & Keluar (Check-in/out)
-D. Peta
+D. Pelan Kawasan
 E. Kembali`,
             answers: {
                 A: `📍 *Lokasi*\nCamp Mantap terletak di Bentong, Pahang, Malaysia.\n\nSemua tapak perkhemahan kami menghadap sungai. 🌊\n\n🗺️ Dapatkan Arah Jalan:\nhttps://maps.app.goo.gl/2tZKaTBiupzDLjRy5`,
@@ -1153,38 +1153,54 @@ async function sendImageMessage(to, imageUrl, caption = "") {
 // ---------------------------------------------------------------------------
 async function handleImageRequest(to, type, text = "") {
     const BASE_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const imagesDir = path.join(__dirname, 'public', 'images');
 
-    // Read all image files from the images directory
-    const allFiles = fs.readdirSync(imagesDir);
-    const imageFiles = allFiles.filter(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
+    // ---------------------------------------------------------------------------
+    // Helper: get images from a named subfolder inside parentFolderId.
+    // Falls back to ALL images in parentFolderId if no matching subfolder found.
+    // ---------------------------------------------------------------------------
+    async function getDriveSubfolderImages(parentFolderId, namePattern) {
+        const subfolders = await listDriveSubfolders(parentFolderId);
+        const match = subfolders.find(f => namePattern.test(f.name));
+        if (match) return listDriveImages(match.id);
+        // flat fallback — filter by pattern on filenames
+        const all = await listDriveImages(parentFolderId);
+        return all.filter(f => namePattern.test(f.name));
+    }
 
-    if (imageFiles.length === 0) {
-        console.log('[Images] No image files found in public/images');
-        await sendTextMessage(to, "Sorry, no images are available at the moment. 😔\nPlease try again later or repeat your question in a clearer form.\n\n---\n\nMaaf, tiada gambar disediakan buat masa ini. 😔\nSila cuba lagi nanti atau ulang soalan anda dengan lebih jelas.");
-        return;
+    // ---------------------------------------------------------------------------
+    // Helper: send an array of Drive files as images
+    // ---------------------------------------------------------------------------
+    async function sendDriveImages(files, captionFn) {
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            const imageUrl = driveImageUrl(f.id);
+            await sendImageMessage(to, imageUrl, captionFn(f));
+            if (i < files.length - 1) await new Promise(r => setTimeout(r, 500));
+        }
     }
 
     if (type === 'pricelist') {
-        const file = imageFiles.find(f => /Campsite Pricelist/i.test(f));
-        if (file) {
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
-            const caption = `Here is our campsite pricelist poster! 🏕️💵\nBerikut adalah poster senarai harga tapak kami! 🏕️💵`;
-            console.log(`[Images] Sending pricelist poster: ${file}`);
-            await sendImageMessage(to, imageUrl, caption);
-        } else {
-            await sendTextMessage(to, "Sorry, the campsite pricelist poster is currently unavailable. 😔\nMaaf, poster senarai harga tapak tidak tersedia buat masa ini.");
+        const folderId = process.env.GDRIVE_MISC;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, the campsite pricelist poster is currently unavailable. \ud83d\ude14\nMaaf, poster senarai harga tapak tidak tersedia buat masa ini.");
+            return;
         }
+        const files = await listDriveImages(folderId);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, the campsite pricelist poster is currently unavailable. \ud83d\ude14\nMaaf, poster senarai harga tapak tidak tersedia buat masa ini.");
+            return;
+        }
+        console.log(`[Drive] Sending pricelist poster(s): ${files.length} file(s)`);
+        await sendDriveImages(files, () => `Here is our campsite pricelist poster! \ud83c\udfd5\ufe0f\ud83d\udcb5\nBerikut adalah poster senarai harga tapak kami! \ud83c\udfd5\ufe0f\ud83d\udcb5`);
     }
     else if (type === 'tent') {
-        const detailSheets = [
-            { file: 'Tent Rent @ Style A.jpeg', caption: '🏕️ *Sewa Khemah Style A / Tent Rental Style A*\nPayung Village L | Max 4 pax\n1 malam: RM250 (1-2 org) / RM300 (3-4 org)\nMalam tambahan: RM200 (1-2 org) / RM250 (3-4 org)' },
-            { file: 'Tent Rent @ Style B.jpeg', caption: '🏕️ *Sewa Khemah Style B / Tent Rental Style B*\nPayung Village T (XL) | Max 8 pax\n1 malam: RM350 (1-4 org) / RM400 (5-8 org)\nMalam tambahan: RM300 (1-4 org) / RM350 (5-8 org)' },
-            { file: 'Tent Rent @ Style C.jpeg', caption: '🏕️ *Sewa Khemah Style C / Tent Rental Style C*\nDome Style | Max 8 pax\n1 malam: RM400 (1-4 org) / RM500 (5-8 org)\nMalam tambahan: RM350 (1-4 org) / RM450 (5-8 org)' },
-        ];
-
+        const folderId = process.env.GDRIVE_TENT_PRICE;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, tent rental photos are not available at the moment. \ud83d\ude14\nMaaf, gambar sewa khemah tidak tersedia buat masa ini.");
+            return;
+        }
         await sendTextMessage(to,
-            `Here are our tent rental packages! 🏕️\nBerikut adalah pakej sewa khemah kami! 🏕️\n\n` +
+            `Here are our tent rental packages! \ud83c\udfd5\ufe0f\nBerikut adalah pakej sewa khemah kami! \ud83c\udfd5\ufe0f\n\n` +
             `All packages include / Semua pakej termasuk:\n` +
             `- Air Mattress or Foam / Tilam Angin atau Tilam Foam\n` +
             `- Foam Pillows / Bantal Foam\n` +
@@ -1193,62 +1209,54 @@ async function handleImageRequest(to, type, text = "") {
             `*Note: Price does not include campsite fee (tapak)*\n` +
             `*Nota: Harga tidak termasuk caj tapak perkhemahan*`
         );
-
-        for (let i = 0; i < detailSheets.length; i++) {
-            const { file, caption } = detailSheets[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(file)}`;
-            console.log(`[Images] Sending tent rental sheet ${i + 1}/${detailSheets.length}: ${file}`);
-            await sendImageMessage(to, imageUrl, caption);
-            if (i < detailSheets.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+        // Check for subfolders (Style A / B / C); fall back to flat listing
+        const subfolders = await listDriveSubfolders(folderId);
+        if (subfolders.length > 0) {
+            for (const folder of subfolders) {
+                const folderImages = await listDriveImages(folder.id);
+                if (folderImages.length === 0) continue;
+                await sendTextMessage(to, `\ud83d\udcc2 *${folder.name}*`);
+                await sendDriveImages(folderImages, f => `\ud83c\udfd5\ufe0f ${folder.name} \u2014 ${f.name}`);
+                await new Promise(r => setTimeout(r, 800));
             }
+        } else {
+            const files = await listDriveImages(folderId);
+            if (files.length === 0) {
+                await sendTextMessage(to, "Sorry, tent rental photos are not available at the moment. \ud83d\ude14");
+                return;
+            }
+            await sendDriveImages(files, f => `\ud83c\udfd5\ufe0f Tent Rental / Sewa Khemah \u2014 ${f.name}`);
         }
     }
     else if (type === 'atv') {
-        const atvFiles = imageFiles.filter(f => /atv/i.test(f));
-        if (atvFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no ATV photos are available at the moment. 😔\nMaaf, tiada gambar ATV disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_ACTIVITY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no ATV photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar ATV disediakan buat masa ini.");
             return;
         }
-
-        await sendTextMessage(to,
-            `Here are our ATV car photos! 🏍️🏕️\nBerikut adalah foto kenderaan ATV kami! 🏍️🏕️\n\n` +
-            `Total: ${atvFiles.length} photos / foto`
-        );
-
-        for (let i = 0; i < atvFiles.length; i++) {
-            const filename = atvFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            const caption = filename.replace(/\.[^.]+$/, '');
-            console.log(`[Images] Sending ATV photo ${i + 1}/${atvFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, caption);
-            if (i < atvFiles.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
+        const files = await getDriveSubfolderImages(folderId, /atv/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no ATV photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar ATV disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our ATV photos! \ud83c\udfd5\ufe0f\ud83c\udfd4\ufe0f\nBerikut adalah foto ATV kami! \ud83c\udfd5\ufe0f\ud83c\udfd4\ufe0f\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} ATV photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udfd4\ufe0f ATV Ride / Pandu ATV \u2014 Camp Mantap');
     }
     else if (type === 'campsite') {
-        const tapakFiles = imageFiles.filter(f => /Tapak/i.test(f));
-        if (tapakFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no campsite tapak photos are available at the moment. 😔\nMaaf, tiada gambar tapak perkhemahan disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_CAMPSITE;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no campsite photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar tapak perkhemahan disediakan buat masa ini.");
             return;
         }
-
-        await sendTextMessage(to,
-            `Here are our campsite photos (Tapak)! 📸🏕️\nBerikut adalah foto tapak perkhemahan kami! 📸🏕️\n\n` +
-            `Total: ${tapakFiles.length} photos / foto`
-        );
-
-        for (let i = 0; i < tapakFiles.length; i++) {
-            const filename = tapakFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            const caption = filename.replace(/\.[^.]+$/, '');
-            console.log(`[Images] Sending campsite photo ${i + 1}/${tapakFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, caption);
-            if (i < tapakFiles.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
+        const files = await listDriveImages(folderId);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no campsite photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar tapak perkhemahan disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our campsite photos (Tapak)! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto tapak perkhemahan kami! \ud83d\udcf8\ud83c\udfd5\ufe0f\n\nTotal: ${files.length} photos / foto`);
+        console.log(`[Drive] Sending ${files.length} campsite photo(s)`);
+        await sendDriveImages(files, f => `\ud83c\udfd5\ufe0f ${f.name}`);
     }
     else if (type === 'camp') {
         const folderId = process.env.GDRIVE_CAMPTYPE;
@@ -1256,139 +1264,125 @@ async function handleImageRequest(to, type, text = "") {
             await sendTextMessage(to, "Sorry, camp type photos are not available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
             return;
         }
-
-        // List Style A / B / C subfolders inside GDRIVE_CAMPTYPE
         const styleSubfolders = await listDriveSubfolders(folderId);
-
         if (styleSubfolders.length === 0) {
             await sendTextMessage(to, "Sorry, no camp type photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
             return;
         }
-
-        await sendTextMessage(to,
-            `Here are our camp type photos (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto jenis khemah kami (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f`
-        );
-
+        await sendTextMessage(to, `Here are our camp type photos (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto jenis khemah kami (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f`);
         for (const folder of styleSubfolders) {
             const folderImages = await listDriveImages(folder.id);
             if (folderImages.length === 0) continue;
-
-            // Label header for each style
             await sendTextMessage(to, `\ud83d\udcc2 *${folder.name}* \u2014 ${folderImages.length} photo(s) / foto`);
-
-            for (let i = 0; i < folderImages.length; i++) {
-                const f = folderImages[i];
-                const imageUrl = driveImageUrl(f.id);
-                const caption = `\ud83c\udfd5\ufe0f ${folder.name} \u2014 ${f.name}`;
-                console.log(`[Drive] Sending camp type photo ${i + 1}/${folderImages.length} from "${folder.name}": ${f.name}`);
-                await sendImageMessage(to, imageUrl, caption);
-                if (i < folderImages.length - 1) await new Promise(r => setTimeout(r, 500));
-            }
-
-            await new Promise(r => setTimeout(r, 800)); // pause between styles
+            await sendDriveImages(folderImages, f => `\ud83c\udfd5\ufe0f ${folder.name} \u2014 ${f.name}`);
+            await new Promise(r => setTimeout(r, 800));
         }
     }
     else if (type === 'archery') {
-        const archeryFiles = imageFiles.filter(f => /archery/i.test(f));
-        if (archeryFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no archery photos are available at the moment. 😔\nMaaf, tiada gambar memanah disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_ACTIVITY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no archery photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar memanah disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here are our archery activity photos! 🏹🎯\nBerikut adalah foto aktiviti memanah kami! 🏹🎯\n\nTotal: ${archeryFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < archeryFiles.length; i++) {
-            const filename = archeryFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending archery photo ${i + 1}/${archeryFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '🏹 Archery Activity / Aktiviti Memanah — Camp Mantap');
-            if (i < archeryFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        const files = await getDriveSubfolderImages(folderId, /archery|memanah|panah/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no archery photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar memanah disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our archery activity photos! \ud83c\udfd9\ufe0f\ud83c\udfaf\nBerikut adalah foto aktiviti memanah kami! \ud83c\udfd9\ufe0f\ud83c\udfaf\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} archery photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udfaf Archery Activity / Aktiviti Memanah \u2014 Camp Mantap');
     }
     else if (type === 'durian') {
-        const durianFiles = imageFiles.filter(f => /durian/i.test(f));
-        if (durianFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no durian/fruit photos are available at the moment. 😔\nMaaf, tiada gambar durian/buah disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_ACTIVITY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no durian/fruit photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar durian/buah disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here are our seasonal durian fruit photos! 🍈🌿\nBerikut adalah foto aktiviti beli buah durian kami (mengikut musim)! 🍈🌿\n\nTotal: ${durianFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < durianFiles.length; i++) {
-            const filename = durianFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending durian photo ${i + 1}/${durianFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '🍈 Seasonal Durian / Buah Musiman — Camp Mantap');
-            if (i < durianFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        const files = await getDriveSubfolderImages(folderId, /durian|fruit|buah/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no durian/fruit photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar durian/buah disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our seasonal durian fruit photos! \ud83c\udf4a\ud83c\udf3f\nBerikut adalah foto aktiviti beli buah durian kami (mengikut musim)! \ud83c\udf4a\ud83c\udf3f\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} durian photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udf4a Seasonal Durian / Buah Musiman \u2014 Camp Mantap');
     }
     else if (type === 'river') {
-        const riverFiles = imageFiles.filter(f => /^river\./i.test(f));
-        if (riverFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no river photos are available at the moment. 😔\nMaaf, tiada gambar sungai disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_SCENERY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no river photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar sungai disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here is our beautiful riverside view! 🌊🏕️\nBerikut adalah pemandangan tepi sungai kami! 🌊🏕️\n\nTotal: ${riverFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < riverFiles.length; i++) {
-            const filename = riverFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending river photo ${i + 1}/${riverFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '🌊 Riverside View / Pemandangan Sungai — Camp Mantap');
-            if (i < riverFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        const files = await getDriveSubfolderImages(folderId, /river|sungai/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no river photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar sungai disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here is our beautiful riverside view! \ud83c\udf0a\ud83c\udfd5\ufe0f\nBerikut adalah pemandangan tepi sungai kami! \ud83c\udf0a\ud83c\udfd5\ufe0f\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} river photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udf0a Riverside View / Pemandangan Sungai \u2014 Camp Mantap');
     }
     else if (type === 'morning') {
-        const morningFiles = imageFiles.filter(f => /^morning/i.test(f));
-        if (morningFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no morning view photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan pagi disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_SCENERY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no morning view photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan pagi disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here are our morning scenery photos! 🌅🏕️\nBerikut adalah foto pemandangan pagi di Camp Mantap! 🌅🏕️\n\nTotal: ${morningFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < morningFiles.length; i++) {
-            const filename = morningFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending morning photo ${i + 1}/${morningFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '🌅 Morning Scenery / Pemandangan Pagi — Camp Mantap');
-            if (i < morningFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        const files = await getDriveSubfolderImages(folderId, /morning|pagi/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no morning view photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan pagi disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our morning scenery photos! \ud83c\udf05\ud83c\udfd5\ufe0f\nBerikut adalah foto pemandangan pagi di Camp Mantap! \ud83c\udf05\ud83c\udfd5\ufe0f\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} morning photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udf05 Morning Scenery / Pemandangan Pagi \u2014 Camp Mantap');
     }
     else if (type === 'night') {
-        const nightFiles = imageFiles.filter(f => /^night/i.test(f));
-        if (nightFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no night view photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan malam disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_SCENERY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no night view photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan malam disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here are our night scenery photos! 🌙✨🏕️\nBerikut adalah foto pemandangan malam di Camp Mantap! 🌙✨🏕️\n\nTotal: ${nightFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < nightFiles.length; i++) {
-            const filename = nightFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending night photo ${i + 1}/${nightFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '🌙 Night Scenery / Pemandangan Malam — Camp Mantap');
-            if (i < nightFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        const files = await getDriveSubfolderImages(folderId, /night|malam/i);
+        if (files.length === 0) {
+            await sendTextMessage(to, "Sorry, no night view photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan malam disediakan buat masa ini.");
+            return;
         }
+        await sendTextMessage(to, `Here are our night scenery photos! \ud83c\udf19\u2728\ud83c\udfd5\ufe0f\nBerikut adalah foto pemandangan malam di Camp Mantap! \ud83c\udf19\u2728\ud83c\udfd5\ufe0f\n\nTotal: ${files.length} photo(s) / foto`);
+        console.log(`[Drive] Sending ${files.length} night photo(s)`);
+        await sendDriveImages(files, () => '\ud83c\udf19 Night Scenery / Pemandangan Malam \u2014 Camp Mantap');
     }
     else if (type === 'scenery') {
-        const sceneryFiles = imageFiles.filter(f => /^(morning|night|river)/i.test(f));
-        if (sceneryFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, no scenery photos are available at the moment. 😔\nMaaf, tiada gambar pemandangan disediakan buat masa ini.");
+        const folderId = process.env.GDRIVE_SCENERY;
+        if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+            await sendTextMessage(to, "Sorry, no scenery photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan disediakan buat masa ini.");
             return;
         }
-        await sendTextMessage(to,
-            `Here are our Camp Mantap scenery photos! 🌅🌙🌊\nBerikut adalah foto suasana dan pemandangan Camp Mantap! 🌅🌙🌊\n\nTotal: ${sceneryFiles.length} photo(s) / foto`
-        );
-        for (let i = 0; i < sceneryFiles.length; i++) {
-            const filename = sceneryFiles[i];
-            const imageUrl = `${BASE_URL}/images/${encodeURIComponent(filename)}`;
-            const label = /^morning/i.test(filename) ? '🌅 Morning View' : /^night/i.test(filename) ? '🌙 Night View' : '🌊 River View';
-            console.log(`[Images] Sending scenery photo ${i + 1}/${sceneryFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, `${label} / Pemandangan — Camp Mantap`);
-            if (i < sceneryFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+        // Send all subfolders (Morning, Night, River) or flat
+        const subfolders = await listDriveSubfolders(folderId);
+        if (subfolders.length > 0) {
+            await sendTextMessage(to, `Here are our Camp Mantap scenery photos! \ud83c\udf05\ud83c\udf19\ud83c\udf0a\nBerikut adalah foto suasana dan pemandangan Camp Mantap! \ud83c\udf05\ud83c\udf19\ud83c\udf0a`);
+            for (const folder of subfolders) {
+                const folderImages = await listDriveImages(folder.id);
+                if (folderImages.length === 0) continue;
+                const label = /morning|pagi/i.test(folder.name) ? '\ud83c\udf05 Morning View' : /night|malam/i.test(folder.name) ? '\ud83c\udf19 Night View' : '\ud83c\udf0a River View';
+                await sendTextMessage(to, `${label} \u2014 ${folderImages.length} photo(s)`);
+                await sendDriveImages(folderImages, () => `${label} / Pemandangan \u2014 Camp Mantap`);
+                await new Promise(r => setTimeout(r, 800));
+            }
+        } else {
+            const files = await listDriveImages(folderId);
+            if (files.length === 0) {
+                await sendTextMessage(to, "Sorry, no scenery photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar pemandangan disediakan buat masa ini.");
+                return;
+            }
+            await sendTextMessage(to, `Here are our Camp Mantap scenery photos! \ud83c\udf05\ud83c\udf19\ud83c\udf0a\nBerikut adalah foto suasana dan pemandangan Camp Mantap! \ud83c\udf05\ud83c\udf19\ud83c\udf0a\n\nTotal: ${files.length} photo(s) / foto`);
+            console.log(`[Drive] Sending ${files.length} scenery photo(s)`);
+            await sendDriveImages(files, f => {
+                const label = /morning|pagi/i.test(f.name) ? '\ud83c\udf05 Morning View' : /night|malam/i.test(f.name) ? '\ud83c\udf19 Night View' : '\ud83c\udf0a River View';
+                return `${label} / Pemandangan \u2014 Camp Mantap`;
+            });
         }
     }
     else if (type === 'payment_return') {
@@ -1462,24 +1456,24 @@ async function handleImageRequest(to, type, text = "") {
         }
     }
     else if (type === 'map') {
-        const miscDir = path.join(__dirname, 'public', 'images', 'misc');
-        let miscFiles = [];
-        try {
-            miscFiles = fs.readdirSync(miscDir).filter(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
-        } catch (e) {
-            // misc folder doesn't exist yet
-        }
-        const mapFiles = miscFiles.filter(f => /map/i.test(f));
-        if (mapFiles.length === 0) {
-            await sendTextMessage(to, "Sorry, the map is not available at the moment. \ud83d\ude14\nMaaf, peta tidak tersedia buat masa ini.");
+        const folderId = process.env.GDRIVE_MISC;
+        if (!folderId) {
+            await sendTextMessage(to, "Sorry, the camp layout is not available at the moment. \ud83d\ude14\nMaaf, pelan kawasan tidak tersedia buat masa ini.");
             return;
         }
-        for (let i = 0; i < mapFiles.length; i++) {
-            const filename = mapFiles[i];
-            const imageUrl = `${BASE_URL}/images/misc/${encodeURIComponent(filename)}`;
-            console.log(`[Images] Sending map image ${i + 1}/${mapFiles.length}: ${filename}`);
-            await sendImageMessage(to, imageUrl, '\ud83d\uddfa\ufe0f Camp Mantap \u2014 Map / Peta');
-            if (i < mapFiles.length - 1) await new Promise(r => setTimeout(r, 500));
+
+        const allFiles = await listDriveImages(folderId);
+        if (allFiles.length === 0) {
+            await sendTextMessage(to, "Sorry, the camp layout is not available at the moment. \ud83d\ude14\nMaaf, pelan kawasan tidak tersedia buat masa ini.");
+            return;
+        }
+
+        for (let i = 0; i < allFiles.length; i++) {
+            const f = allFiles[i];
+            const imageUrl = driveImageUrl(f.id);
+            console.log(`[Drive] Sending camp layout image ${i + 1}/${allFiles.length}: ${f.name}`);
+            await sendImageMessage(to, imageUrl, '\ud83d\uddfa\ufe0f Camp Mantap \u2014 Camp Layout / Pelan Kawasan');
+            if (i < allFiles.length - 1) await new Promise(r => setTimeout(r, 500));
         }
     }
     else if (type === 'ask') {
