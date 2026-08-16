@@ -73,16 +73,24 @@ E. Go Back`,
         },
         campsites: {
             prompt: `Choose a campsite category to view pricing and details:
-A. Standard (Campsite 2, 3)
-B. Medium (Campsite 4, 6, 7, 8, 9)
-C. Family (Campsite 1, 5)
-D. Additional Pax & Tents Policy
-E. Go Back`,
+A. Campsite Pricing (All Sizes)
+B. Additional Pax & Tents Policy
+C. Go Back`,
             answers: {
-                A: `⛺ *Standard Campsite*\n- Campsites: Campsite 2, Campsite 3\n- Camp Size: 7m x 10m\n- Pax Included in Price: 4 Pax\n- Max Pax: 6 Pax\n- Max Vehicles: 2\n- Pricing: *RM 100 / night*`,
-                B: `⛺ *Medium Campsite*\n- Campsites: Campsite 4, Campsite 6, Campsite 7, Campsite 8, Campsite 9\n- Camp Size: 8m x 11m\n- Pax Included in Price: 6 Pax\n- Max Pax: 8 Pax\n- Max Vehicles: 2\n- Pricing: *RM 130 / night*`,
-                C: `⛺ *Family Campsite*\n- Campsites: Campsite 1, Campsite 5\n- Camp Size: 10m x 13m\n- Pax Included in Price: 8 Pax\n- Max Pax: 10 Pax\n- Max Vehicles: 3\n- Pricing: *RM 160 / night*`,
-                D: `💵 *Additional Pax & Tents*\n- Additional Pax Charges: RM 50 / Pax\n- Infants (4 years old & below): FOC (Free of Charge)\n- Note: Tents in the pictures/gallery are for illustration purposes and size comparison only. Campers must bring their own tents unless renting a tent package.`
+                A: `⛺️ *Campsite Pricing*
+
+🔹 *Standard* — Campsite 2, 3
+- Size: 7m x 10m | Pax included: 4 | Max pax: 6 | Max vehicles: 2
+- Price: *RM 100 / night*
+
+🔹 *Medium* — Campsite 4, 6, 7, 8, 9
+- Size: 8m x 11m | Pax included: 6 | Max pax: 8 | Max vehicles: 2
+- Price: *RM 130 / night*
+
+🔹 *Family* — Campsite 1, 5
+- Size: 10m x 13m | Pax included: 8 | Max pax: 10 | Max vehicles: 3
+- Price: *RM 160 / night*`,
+                B: `💵 *Additional Pax & Tents*\n- Additional Pax Charges: RM 50 / Pax\n- Infants (4 years old & below): FOC (Free of Charge)\n- Note: Tents in the pictures/gallery are for illustration purposes and size comparison only. Campers must bring their own tents unless renting a tent package.`
             }
         },
         tents: {
@@ -182,16 +190,24 @@ E. Kembali`,
         },
         campsites: {
             prompt: `Pilih kategori tapak perkhemahan untuk harga & butiran:
-A. Standard (Tapak 2, 3)
-B. Medium (Tapak 4, 6, 7, 8, 9)
-C. Family (Tapak 1, 5)
-D. Caj Pax Tambahan & Polisi Khemah
-E. Kembali`,
+A. Harga Tapak Perkhemahan (Semua Saiz)
+B. Caj Pax Tambahan & Polisi Khemah
+C. Kembali`,
             answers: {
-                A: `⛺ *Tapak Standard*\n- Tapak: Tapak 2, Tapak 3\n- Saiz: 7m x 10m\n- Pax Termasuk dalam Harga: 4 Pax\n- Maks Pax: 6 Pax\n- Maks Kenderaan: 2\n- Harga: *RM 100 / malam*`,
-                B: `⛺ *Tapak Medium*\n- Tapak: Tapak 4, Tapak 6, Tapak 7, Tapak 8, Tapak 9\n- Saiz: 8m x 11m\n- Pax Termasuk dalam Harga: 6 Pax\n- Maks Pax: 8 Pax\n- Maks Kenderaan: 2\n- Harga: *RM 130 / malam*`,
-                C: `⛺ *Tapak Family*\n- Tapak: Tapak 1, Tapak 5\n- Saiz: 10m x 13m\n- Pax Termasuk dalam Harga: 8 Pax\n- Maks Pax: 10 Pax\n- Maks Kenderaan: 3\n- Harga: *RM 160 / malam*`,
-                D: `💵 *Caj Pax Tambahan & Polisi Khemah*\n- Caj Pax Tambahan: RM 50 / Pax\n- Kanak-kanak (4 tahun & ke bawah): Percuma (FOC)\n- Nota: Khemah di dalam gambar adalah untuk ilustrasi & perbandingan saiz sahaja. Pelanggan perlu membawa khemah sendiri melainkan menempah pakej sewa.`
+                A: `⛺️ *Harga Tapak Perkhemahan*
+
+🔹 *Standard* — Tapak 2, 3
+- Saiz: 7m x 10m | Pax Termasuk: 4 | Maks Pax: 6 | Kenderaan Maks: 2
+- Harga: *RM 100 / malam*
+
+🔹 *Medium* — Tapak 4, 6, 7, 8, 9
+- Saiz: 8m x 11m | Pax Termasuk: 6 | Maks Pax: 8 | Kenderaan Maks: 2
+- Harga: *RM 130 / malam*
+
+🔹 *Family* — Tapak 1, 5
+- Saiz: 10m x 13m | Pax Termasuk: 8 | Maks Pax: 10 | Kenderaan Maks: 3
+- Harga: *RM 160 / malam*`,
+                B: `💵 *Caj Pax Tambahan & Polisi Khemah*\n- Caj Pax Tambahan: RM 50 / Pax\n- Kanak-kanak (4 tahun & ke bawah): Percuma (FOC)\n- Nota: Khemah di dalam gambar adalah untuk ilustrasi & perbandingan saiz sahaja. Pelanggan perlu membawa khemah sendiri melainkan menempah pakej sewa.`
             }
         },
         tents: {
@@ -336,10 +352,10 @@ function getChatState(history) {
         }
 
         // 2. Campsites & Pricing
-        if (msg.includes("Choose a campsite category to view pricing") && msg.includes("Standard")) {
+        if (msg.includes("Choose a campsite category to view pricing") && msg.includes("Campsite Pricing")) {
             return { level: 2, lang: 'en', menu: 'campsites' };
         }
-        if (msg.includes("Pilih kategori tapak perkhemahan untuk harga") && msg.includes("Standard")) {
+        if (msg.includes("Pilih kategori tapak perkhemahan untuk harga") && msg.includes("Harga Tapak")) {
             return { level: 2, lang: 'bm', menu: 'campsites' };
         }
 
@@ -401,7 +417,7 @@ function isGoBackCommand(input, menu) {
 
     const goBackLetters = {
         general: 'e',
-        campsites: 'e',
+        campsites: 'c',
         tents: 'e',
         activities: 'd',
         rules: 'f',
@@ -784,46 +800,89 @@ app.get("/webhook", (req, res) => {
     return res.sendStatus(403);
 });
 
-// Proxy route to stream Google Drive images securely
+// Proxy route to stream Google Drive files (images & videos) securely
+// Supports HTTP Range requests so WhatsApp can stream videos properly.
 app.get('/drive-image/:fileId', async (req, res) => {
     const { fileId } = req.params;
-    if (!fileId) {
-        return res.status(400).send('Missing fileId');
-    }
+    if (!fileId) return res.status(400).send('Missing fileId');
 
     try {
         const auth = getAuth();
         const drive = google.drive({ version: 'v3', auth });
 
-        // 1. Get metadata to retrieve the MIME type and name
-        const metadata = await drive.files.get({
+        // 1. Get metadata (MIME type, size, name)
+        const meta = await drive.files.get({
             fileId,
-            fields: 'mimeType,name'
+            fields: 'mimeType,name,size'
         });
+        const { mimeType, name, size } = meta.data;
+        const fileSize = parseInt(size || '0', 10);
 
-        res.setHeader('Content-Type', metadata.data.mimeType);
-        res.setHeader('Content-Disposition', `inline; filename="${metadata.data.name}"`);
+        // 2. Always advertise byte-range support
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${name}"`);
 
-        // 2. Fetch the file content as a stream
-        const response = await drive.files.get(
-            { fileId, alt: 'media' },
-            { responseType: 'stream' }
-        );
+        // 3. Handle Range request (needed by WhatsApp for video)
+        const rangeHeader = req.headers['range'];
+        if (rangeHeader && fileSize > 0) {
+            const parts = rangeHeader.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = end - start + 1;
 
-        response.data
-            .on('error', (err) => {
-                console.error(`[Drive Proxy] Stream error for file ${fileId}:`, err.message);
-                if (!res.headersSent) {
-                    res.status(500).send('Error streaming file');
-                }
-            })
-            .pipe(res);
+            res.status(206);
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+            res.setHeader('Content-Length', chunkSize);
+
+            // Drive API doesn't support byte-range natively via the client library,
+            // so we stream the full file and skip to the right offset.
+            // For files ≤16 MB this is fast enough for WhatsApp's fetcher.
+            const response = await drive.files.get(
+                { fileId, alt: 'media' },
+                { responseType: 'stream' }
+            );
+
+            let bytesRead = 0;
+            let sent = 0;
+            response.data
+                .on('data', (chunk) => {
+                    const chunkStart = bytesRead;
+                    const chunkEnd = bytesRead + chunk.length - 1;
+                    bytesRead += chunk.length;
+
+                    if (chunkEnd < start || sent >= chunkSize) return; // before range
+
+                    const sliceStart = Math.max(0, start - chunkStart);
+                    const sliceEnd = Math.min(chunk.length, start + chunkSize - chunkStart);
+                    const slice = chunk.slice(sliceStart, sliceEnd);
+                    sent += slice.length;
+                    res.write(slice);
+                })
+                .on('end', () => res.end())
+                .on('error', (err) => {
+                    console.error(`[Drive Proxy] Stream error for ${fileId}:`, err.message);
+                    if (!res.headersSent) res.status(500).send('Stream error');
+                });
+        } else {
+            // 4. Full file response
+            if (fileSize > 0) res.setHeader('Content-Length', fileSize);
+
+            const response = await drive.files.get(
+                { fileId, alt: 'media' },
+                { responseType: 'stream' }
+            );
+            response.data
+                .on('error', (err) => {
+                    console.error(`[Drive Proxy] Stream error for ${fileId}:`, err.message);
+                    if (!res.headersSent) res.status(500).send('Stream error');
+                })
+                .pipe(res);
+        }
 
     } catch (err) {
-        console.error(`[Drive Proxy] Failed to fetch file ${fileId}:`, err.message);
-        if (!res.headersSent) {
-            res.status(500).send('Failed to fetch image from Google Drive');
-        }
+        console.error(`[Drive Proxy] Failed to fetch ${fileId}:`, err.message);
+        if (!res.headersSent) res.status(500).send('Failed to fetch file from Google Drive');
     }
 });
 
@@ -940,9 +999,26 @@ app.post("/webhook", async (req, res) => {
                             const optionKey = text.trim().toUpperCase();
 
                             if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
-                                // Valid lettered pick → show answer then repeat the sub-menu
+                                // Valid lettered pick → show answer then repeat sub-menu
                                 const answer = subMenuObj.answers[optionKey];
-                                replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
+
+                                if (menu === 'campsites' && optionKey === 'A') {
+                                    // Combined campsite pricing: text + Drive price poster
+                                    await sendTextMessage(sender, answer);
+                                    await new Promise(r => setTimeout(r, 500));
+                                    await sendPricePoster(sender, null);
+                                    await new Promise(r => setTimeout(r, 500));
+                                    replyMsg = subMenuObj.prompt;
+                                } else if (menu === 'tents' && ['A', 'B', 'C'].includes(optionKey)) {
+                                    // Tent style: text + Drive style poster
+                                    await sendTextMessage(sender, answer);
+                                    await new Promise(r => setTimeout(r, 500));
+                                    await sendPricePoster(sender, optionKey);
+                                    await new Promise(r => setTimeout(r, 500));
+                                    replyMsg = subMenuObj.prompt;
+                                } else {
+                                    replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
+                                }
                             } else if (menu === 'general' && optionKey === 'D') {
                                 // Map image from public/images/misc/
                                 console.log(`[Images Menu] Sending map image to ${sender}`);
@@ -1171,6 +1247,48 @@ async function sendVideoMessage(to, videoUrl, caption = "") {
             }
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// sendPricePoster(to, styleLetter)
+// Sends a price poster from GDRIVE_PRICE.
+// styleLetter = 'A'|'B'|'C' for tent style posters, null for campsite poster.
+// ---------------------------------------------------------------------------
+async function sendPricePoster(to, styleLetter) {
+    const folderId = process.env.GDRIVE_PRICE;
+    if (!folderId || folderId === 'PASTE_FOLDER_ID_HERE') {
+        console.log('[Drive] GDRIVE_PRICE not set \u2014 skipping price poster');
+        return;
+    }
+
+    const files = await listDriveImages(folderId);
+    if (files.length === 0) {
+        console.log('[Drive] No images found in GDRIVE_PRICE folder');
+        return;
+    }
+
+    let file;
+    if (styleLetter) {
+        // Match 'Style A', 'Style_A', 'StyleA', 'Camp Style A', etc.
+        const pattern = new RegExp(`style[\\s._-]?${styleLetter}\\b`, 'i');
+        file = files.find(f => pattern.test(f.name));
+    } else {
+        // Campsite poster \u2014 any file NOT matching a style letter
+        file = files.find(f => !/style[\s._-]?[abc]\b/i.test(f.name));
+    }
+
+    if (!file) {
+        console.log(`[Drive] Price poster not found for: ${styleLetter ? 'Style ' + styleLetter : 'Campsite'}`);
+        return;
+    }
+
+    const imageUrl = driveImageUrl(file.id);
+    const caption = styleLetter
+        ? `\ud83c\udfaa Camp Style ${styleLetter} \u2014 Price / Harga`
+        : `\u26fa\ufe0f Campsite Pricelist \u2014 Camp Mantap`;
+
+    console.log(`[Drive] Sending price poster: ${file.name}`);
+    await sendImageMessage(to, imageUrl, caption);
 }
 
 // ---------------------------------------------------------------------------
