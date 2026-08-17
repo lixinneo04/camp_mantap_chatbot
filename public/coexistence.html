@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camp Mantap WhatsApp Coexistence</title>
+
+    <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+</head>
+
+<body>
+    <h1>Camp Mantap WhatsApp Coexistence</h1>
+
+    <p>Click the button to start WhatsApp Embedded Signup.</p>
+
+    <button id="connectBtn" disabled>
+        Loading Facebook SDK...
+    </button>
+
+    <pre id="result"></pre>
+
+    <script>
+        window.fbAsyncInit = function () {
+            FB.init({
+                appId: '2130494357850464',
+                cookie: true,
+                xfbml: true,
+                version: 'v23.0'
+            });
+
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('connectBtn').textContent =
+                'Connect Camp Mantap WhatsApp';
+
+            console.log('Facebook SDK initialized');
+        };
+
+        document.getElementById('connectBtn').addEventListener('click', function () {
+            document.getElementById('result').textContent =
+                'Opening Meta Embedded Signup...';
+
+            FB.login(function (response) {
+                console.log('FB.login response:', response);
+
+                document.getElementById('result').textContent =
+                    JSON.stringify(response, null, 2);
+
+                if (response.authResponse) {
+                    console.log('Facebook login successful');
+                } else {
+                    console.log('Facebook login cancelled or failed');
+                }
+            }, {
+                config_id: '923062280857767',
+                response_type: 'code',
+                override_default_response_type: true,
+
+                extras: {
+                    setup: {},
+                    featureType: 'whatsapp_business_app_onboarding',
+                    sessionInfoVersion: '3'
+                }
+            });
+        });
+
+        window.addEventListener('message', function (event) {
+            if (!event.origin.endsWith('facebook.com')) {
+                return;
+            }
+
+            try {
+                const data = JSON.parse(event.data);
+
+                console.log('Embedded Signup event:', data);
+
+                document.getElementById('result').textContent =
+                    JSON.stringify(data, null, 2);
+            } catch (error) {
+                // Ignore messages that are not JSON
+            }
+        });
+    </script>
+</body>
+
+</html>
