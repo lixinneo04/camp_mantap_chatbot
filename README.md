@@ -1,11 +1,12 @@
 # Camp Mantap — Booking & Assistant System Documentation
 
-Welcome to the official repository for **Camp Mantap** (located near Bentong, Pahang). This repository contains the complete ecosystem of tools designed to automate customer service, handle campsite FAQs via WhatsApp, and present booking availability.
+Welcome to the official repository for **Camp Mantap** (located near Bentong, Pahang). This repository contains the complete ecosystem of tools designed to automate customer service, handle campsite FAQs via WhatsApp, present booking availability, and manage WhatsApp Embedded Signup onboarding.
+
 ---
 
 ## 1. System Architecture
 
-The following diagram illustrates the complete end-to-end message flow and integration between the customer, WhatsApp Gateway, the Chatbot Server, and Supabase using a multi-level state-machine.
+The following diagram illustrates the complete end-to-end message flow and integration between the customer, WhatsApp Cloud API, the Chatbot Server (Node.js), Supabase, and Google Drive.
 
 ```mermaid
 sequenceDiagram
@@ -14,6 +15,7 @@ sequenceDiagram
     participant WA as WhatsApp Gateway (Meta API)
     participant Srv as Chatbot Server (Node.js/Express)
     participant DB as Supabase Database
+    participant Drive as Google Drive API
 
     Customer->>WA: Sends message
     WA->>Srv: Delivers POST Webhook Event
@@ -22,19 +24,24 @@ sequenceDiagram
     Srv->>DB: Fetch last 10 historical conversation messages
     DB-->>Srv: Return chat history
     
-    Srv->>Srv: Resolve state (Level, Language, Active Menu) from history
+    Srv->>Srv: Resolve state (Level, Language, Active Menu) from history & cache
     
-    alt State is Level 0 (Welcome)
+    alt Session Inactive (>1 hour) or Brand New Customer
+        Srv->>Srv: AI-First Mode: Detects language & generates Gemini answer
+        Srv->>WA: Sends AI response + Main Menu
+    else State is Level 0 (Welcome)
         Srv->>Srv: Process Language Selection & Return Main Menu
     else State is Level 1 (Main Menu)
         Srv->>Srv: Route to Submenu Choice (1-8)
     else State is Level 2 (Submenus)
         alt Choice is 'Go Back'
             Srv->>Srv: Transition back to Main Menu
-        else Choice is Photo Option
-            Srv->>WA: Send images directly via handleImageRequest
-        else Choice is standard FAQ text
-            Srv->>Srv: Retrieve static answer from MENUS dictionary
+        else Choice is Photo/Media Option
+            Srv->>Drive: Retrieve file list (uses in-memory cache)
+            Drive-->>Srv: Return files (ID, Name, MIME)
+            loop For each media file
+                Srv->>WA: Send media URL (proxied via /drive-image/:fileId)
+            end
         end
     end
 
@@ -49,62 +56,104 @@ sequenceDiagram
 
 ```text
 ├── camp_mantap_chatbot/          # Backend WhatsApp Webhook & AI server
-│   ├── public/                   # Public static assets (privacy policy, images)
-│   │   ├── images/               # Campsite and tent rental image files
-│   │   └── privacy-policy.html   # Privacy policy page
-│   ├── availability.js           # Live availability querying & schema auto-discovery
-│   ├── server.js                 # Express orchestration & Gemini integration
-│   ├── knowledge_base.md         # Campsite rules, policies, and pricing (FAQ source)
-│   ├── package.json              # Node dependencies
-│   ├── README.md                 # Chatbot-specific developer pointers
-│   └── .env                      # Local environment configuration file (ignored)
+│   ├── public/                   # Public static assets served by the Express server
+│   │   ├── coexistence.html      # WhatsApp Embedded Signup (Coexistence Onboarding) page
+│   │   ├── privacy-policy.html   # Privacy policy page
+│   ├── availability.js           # DEPRECATED: Deprecated availability querying module
+│   ├── google-drive.js           # Google Drive API connection, service authentication & caching
+│   ├── server.js                 # Express app setup, routing, state-machine, and Gemini integration
+│   ├── knowledge_base.md         # Campsite rules, policies, and pricing (FAQs reference markdown)
+│   ├── package.json              # Project dependencies & startup scripts
+│   ├── README.md                 # System developer and operations guide
+│   └── .env                      # Local environment configuration file (gitignored)
 ```
 
 ---
 
 ## 3. Environment Configuration (`.env`)
 
-The chatbot application is configured using environment variables. Create a `.env` file inside the [camp_mantap_chatbot](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot) directory with the following variables:
+The chatbot application is configured using environment variables. Create a `.env` file inside the `camp_mantap_chatbot` directory with the following variables:
 
+### 3.1. General & Database Config
 | Variable Name | Description | Example / Format |
 | :--- | :--- | :--- |
-| `SUPABASE_URL` | The public URL endpoint of your Supabase project instance. | `https://xxxx.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | The secret service role API key bypasses RLS rules for saving conversation histories. | `eyJhbGciOi...` |
-| `GEMINI_API_KEY` | Google Generative AI API Key for accessing Gemini 3.5 models. | `AIzaSy...` |
-| `WHATSAPP_TOKEN` | System user access token generated in Meta Developer console for WhatsApp Cloud API. | `EAAG...` |
-| `PHONE_NUMBER_ID` | The ID of the WhatsApp phone number registered in Meta App dashboard. | `304728...` |
-| `VERIFY_TOKEN` | A secure arbitrary token of your choice configured in Meta Webhook Settings to verify the endpoint. | `my_secure_token` |
 | `PORT` | Local port for the Express application server to run on (defaults to `3000`). | `3000` |
-| `ALERT_PHONE_NUMBER` | Optional phone number in WhatsApp international format to notify admins of webhook errors. | `60123456789` |
+| `SERVER_URL` | The public endpoint of your deployed server (needed to build media proxy URLs). | `https://xxxx.railway.app` |
+| `ALERT_PHONE_NUMBER` | Phone number in international format to notify admins of chatbot webhook errors. | `60123456789` |
+| `SUPABASE_URL` | The public URL endpoint of your Supabase project instance. | `https://xxxx.supabase.co` |
+| `SUPABASE_SERVICE_KEY` | Secret service role API key to bypass RLS rules when fetching/saving chat history. | `eyJhbGciOi...` |
+| `SUPABASE_SCHEMA` | Database schema name used in Supabase. | `public` or `campmantap` |
+
+### 3.2. WhatsApp & AI Config
+| Variable Name | Description | Example / Format |
+| :--- | :--- | :--- |
+| `WHATSAPP_TOKEN` | WhatsApp Cloud API System User Access Token generated in the Meta Developer Console. | `EAAeR...` |
+| `PHONE_NUMBER_ID` | Phone number ID registered inside the Meta App WhatsApp dashboard. | `1092203400652358` |
+| `VERIFY_TOKEN` | Secure arbitrary verification token matching the Webhook configuration in Meta Developer portal. | `neo123` |
+| `GEMINI_API_KEY` | Google Generative AI API Key for accessing the Gemini models. | `AIzaSy...` |
+| `GEMINI_MODEL` | Gemini model version to use (defaults to `gemini-3.5-flash`). | `gemini-1.5-flash` |
+
+### 3.3. Google Drive Configuration
+| Variable Name | Description | Example / Format |
+| :--- | :--- | :--- |
+| `GDRIVE_CREDENTIALS_PATH` | Local file path to the Google Service Account JSON key file. | `./google-credentials.json` |
+| `GDRIVE_CREDENTIALS_JSON` | Production environment JSON string containing the full Google Service Account credentials. | `{"type": "service_account", ...}` |
+| `GDRIVE_CAMPSITE` | Google Drive folder ID for campsite photos (Tapak 1–9). | `1a2b3c...` |
+| `GDRIVE_CAMPTYPE` | Google Drive folder ID for camp type style folders (Style A/B/C). | `1a2b3c...` |
+| `GDRIVE_ACTIVITY` | Google Drive folder ID for activity photos (ATV, archery, durian). | `1a2b3c...` |
+| `GDRIVE_PRICE` | Google Drive folder ID for pricing posters. | `1a2b3c...` |
+| `GDRIVE_TENT_PRICE` | Google Drive folder ID for tent rental package posters. | `1a2b3c...` |
+| `GDRIVE_VIDEO` | Google Drive folder ID for camp videos. | `1a2b3c...` |
+| `GDRIVE_MISC` | Google Drive folder ID for campsite pricelist, maps, and layouts. | `1a2b3c...` |
+| `GDRIVE_SCENERY` | Google Drive folder ID for camp scenery photos (morning, night, river). | `1a2b3c...` |
 
 ---
 
 ## 4. Core Modules & Functionality
 
-### 4.1. [server.js](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot/server.js) (Application Orchestrator)
-Acts as the central entry point and handles HTTP routing, request filtering, conversation state management, and final payload delivery using a structured state machine.
-* **Webhook Verification (`GET /webhook`)**: Checks if the signature matches `VERIFY_TOKEN` and returns the `hub.challenge` to establish connection with Meta.
-* **Message Receipt Filtering**: Identifies and drops delivery/read status updates (`value.statuses`) to avoid redundant processing.
-* **Deduplication**: Remembers processed message IDs in a memory `Set` (`processedMessageIds`) and ignores duplicates. Cleanup occurs automatically after 5 minutes to prevent memory leaks.
-* **History Management & State Resolution**: Pulls the last 10 messages from the `conversations` table in Supabase. Resolves the active state (`level`, `lang`, `menu`) dynamically by searching backwards for known menu prompt templates.
-* **Menu Routing Engine**:
-  * **Level 0**: Language Selection prompt (English or Bahasa Melayu).
-  * **Level 1**: Main Menu containing 8 topics.
-  * **Level 2**: Topic-specific sub-menus (prompts and answers) derived from `knowledge_base.md`.
-* **Direct Image Integration**: Automatically calls `handleImageRequest` to stream campsite photos, camp layouts, scenery, and activities photos when corresponding sub-menu options are selected, seamlessly resuming menu prompts afterwards.
-* **Human Handoff**: Intercepts phrases requesting real human support or Miss Jenny and directs them to manual admin contact.
-* **Fallback Resolution**: If any uncaught error interrupts the execution, sends a fallback message asking the customer to try again later.
+### 4.1. `server.js` (Application Orchestrator)
+Acts as the central router and coordinator for incoming WhatsApp webhooks, state resolution, and automated responses.
+* **Webhook Verification (`GET /webhook`)**: Validates challenge token from Meta Cloud API using the configured `VERIFY_TOKEN`.
+* **State Resolution**: Reads the last 10 historical database logs from Supabase. Resolves conversation level (`0` = Welcome, `1` = Main Menu, `2` = Sub-menus) by looking backwards for known templates.
+* **AI-First / Re-entry Mode**: If a customer is brand new (no history) or has been silent for more than 1 hour (`SESSION_TTL_MS = 3600000`), the bot triggers **AI-First Mode**. The message is processed by Gemini, which answers naturally, detects the language, caches it, and appends the Main FAQ Menu to guide the customer.
+* **Language Persistency**: Maintains language choice (`bm` or `en`) using an in-memory process cache (`langCache`) as the primary source, falling back to database history.
+* **Interactive Media Requests**: Categorizes and matches incoming keywords or submenu clicks to trigger automated image uploads from Google Drive (e.g. atv, campsite, scenery, refund records).
+* **Human Handoff**: Intercepts requests to chat with a human or Miss Jenny and sends `HUMAN_HANDOFF_MESSAGE`.
 
-### 4.2. [knowledge_base.md](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot/knowledge_base.md) (Unified Knowledge Base)
-Acts as the static source of truth for campsite parameters verified by administration. All menus, submenus, prices, policies, and details are aligned with this file.
+### 4.2. `google-drive.js` (Google Drive Integration)
+Connects to Google Drive using a Google Service Account to list, sort, and retrieve media assets dynamically.
+* **Service Account Auth**: Resolves credentials dynamically via path file `GDRIVE_CREDENTIALS_PATH` or direct JSON string configuration `GDRIVE_CREDENTIALS_JSON` for cloud services (like Railway).
+* **Caching Layer**: Caches images, subfolders, and video file meta-lists for 60 seconds (`CACHE_TTL_MS`) to bypass Google Drive API rate-limits and avoid synchronous overhead.
+* **Categorized Searches**: Uses regular expressions to match requested categories against subfolder names or file names inside Google Drive.
+
+### 4.3. `public/coexistence.html` (WhatsApp Embedded Onboarding)
+Provides a front-end interface that triggers the Facebook SDK Login with embedded signup configurations (`config_id`, `featureType: 'whatsapp_business_app_onboarding'`). This allows Camp Mantap to securely onboard their official WhatsApp Business API account within the system.
 
 ---
 
-## 5. Logical Workflows
+## 5. Diagnostic & Proxy Routes
 
-### 5.1. Incoming Message Lifecycle Workflow
+The server exposes several diagnostic endpoints to ease debugging and verify integrations:
 
-The sequence of operations when a webhook is triggered:
+* **`GET /health`**
+  Returns `OK` (HTTP 200) to verify the Express server is online.
+  
+* **`GET /test-db`**
+  Executes diagnostic checks against Supabase. Runs a `SELECT` query, performs a temporary `INSERT` into the `conversations` table, and immediately cleans it up using a `DELETE` command.
+  
+* **`GET /test-drive`**
+  Checks credentials and listings for all Google Drive folder IDs configured in the environment. Returns file counts, image/video counts, and subfolder lists for each active folder.
+
+* **`GET /drive-image/:fileId`**
+  A secure streaming proxy that fetches binaries from Google Drive using the Service Account and pipes them to WhatsApp/clients.
+  * Sets the correct `Content-Type` and metadata.
+  * Supports **HTTP Range requests** (`Range` header) with byte offsets, which is required by WhatsApp's media servers to buffer and stream videos correctly.
+
+---
+
+## 6. Logical Workflows
+
+### 6.1. Webhook Message Lifecycle
 
 ```
 [Incoming POST Request to /webhook]
@@ -125,7 +174,7 @@ The sequence of operations when a webhook is triggered:
     [Add ID to processedMessageIds]
                 │
                 ▼
-     [Get Conversation History]
+      [Get Conversation History]
                 │
                 ▼
     [Is human handoff requested?] ── Yes ───► [Send HUMAN_HANDOFF_MESSAGE] ──► (End)
@@ -139,10 +188,10 @@ The sequence of operations when a webhook is triggered:
                 │                       │                        │
        [Check lang selection]   [Check choice (1-8)]     [Check choice (A-F/0)]
        - BM: Main Menu BM       - 1: Gen Info Menu       - standard FAQ text:
-       - EN: Main Menu EN       - 2: Campsites Menu        Send answer + repeat submenu
-       - Else: Welcome Msg      - ...                    - Photo choice:
-                                - 8: Availability links    Send photos + repeat submenu
-                                                         - Go Back (0 / letter):
+       - EN: Main Menu EN       - ...                      Send answer + repeat submenu
+       - Else: Welcome Msg      - 8: Availability links  - Photo choice:
+                                                           Send photos + repeat submenu
+                                                         - Go Back:
                                                            Send Main Menu
                 │                       │                        │
                 └───────────────────────┼────────────────────────┘
@@ -155,24 +204,7 @@ The sequence of operations when a webhook is triggered:
 
 ---
 
-## 6. Menu Logic & Formatting Constraints
-
-### 6.1. State-Machine Rules
-* **Language Persistency**: The bot maintains the customer's language choice (`bm` or `en`) automatically once selected at Level 0, using it to display all subsequent Level 1 and Level 2 menus.
-* **Deterministic Responses**: No generative LLM is used, guaranteeing that information matches the official `knowledge_base.md` parameters exactly and never hallucinates.
-* **Looping Menus**: At Level 2, displaying an answer automatically appends the submenu prompt below it, allowing the customer to continue typing options without getting lost.
-* **Universal Go Back**: Customers can type `0`, `00`, `back`, `kembali`, `menu`, or the menu-specific Go Back letters at any time to return to the Main Menu.
-
-### 6.2. WhatsApp-specific Formatting
-* **Lists & Bullets**: All option lists and bullet points use `- ` (dash followed by a space) to ensure clean rendering on mobile devices.
-* **Bold Formatting**: Wrapped in single asterisks `*like this*`. Double asterisks `**` are strictly avoided since they are not supported by the WhatsApp client.
-* **Stale Message Defense**: Restricts webhook handling to messages under 30 seconds old to prevent spamming customers after server downtime.
-
----
-
-## 7. Local Setup & Running
-
-Follow these steps to run the chatbot server locally:
+## 7. Local Setup & Execution
 
 1. **Install Dependencies**:
    ```bash
@@ -180,36 +212,18 @@ Follow these steps to run the chatbot server locally:
    npm install
    ```
 
-2. **Configure Environment Variables**:
-   Create a `.env` file in the [camp_mantap_chatbot](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/camp_mantap_chatbot) directory and configure your keys as shown in **Section 3**.
+2. **Configure Credentials**:
+   * Create a `.env` file as detailed in **Section 3**.
+   * Place your Google Service Account key JSON in the project root as `google-credentials.json` (or set `GDRIVE_CREDENTIALS_JSON` / `GDRIVE_CREDENTIALS_PATH`).
 
-3. **Start the Express Server**:
+3. **Start the Server**:
    ```bash
    npm start
    ```
-   The server runs on the port configured in your `.env` file (defaults to `3000`).
 
-4. **Run Availability Plugin Dashboard**:
-   Simply open [index.html](file:///c:/Users/ricky/OneDrive/Desktop/kabel/Camp_mantap/Availability_plugin/index.html) in any web browser. Use the gear configuration modal to save your Supabase credentials locally inside your browser's localStorage.
-
----
-
-## 8. Webhook Tunneling via Ngrok
-
-Since Meta's WhatsApp Cloud API requires an HTTPS callback URL to deliver message webhooks, establish a local secure tunnel:
-
-1. **Start Ngrok**:
+4. **Ngrok Webhook Tunneling** (For local development):
+   Ensure Meta can route requests to your machine:
    ```bash
    ngrok http 3000
    ```
-
-2. **Copy the HTTPS URL**:
-   Copy the secure address generated by Ngrok (e.g., `https://xxxx.ngrok-free.app`).
-
-3. **Configure the Meta Developer Portal**:
-   - Go to your Meta App Dashboard -> **WhatsApp** -> **Configuration**.
-   - Under **Webhook**, click **Edit**.
-   - **Callback URL**: Enter `https://xxxx.ngrok-free.app/webhook`.
-   - **Verify Token**: Enter the exact same value as your `VERIFY_TOKEN` in your `.env` file.
-   - Click **Verify and save**.
-   - Under **Webhook fields**, click **Manage** and subscribe to **messages**.
+   Configure the resulting HTTPS URL (`https://xxxx.ngrok-free.app/webhook`) as your Webhook callback inside the Meta Developer Portal.
