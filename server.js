@@ -67,7 +67,7 @@ D. Camp Layout
 E. Go Back`,
             answers: {
                 A: `📍 *Location*\nCamp Mantap is located in Bentong, Pahang, Malaysia.\n\nAll our campsites face a beautiful river. 🌊\n\n🗺️ Get Directions:\nhttps://maps.app.goo.gl/2tZKaTBiupzDLjRy5`,
-                B: `⛺ *Campsite Facilities*\nWe provide:\n- 24-hour electricity plug points at each campsite (campers must bring own extension cables)\n- Individual firepits at each campsite\n- Toilets with water heaters (+soap) and washing areas\n- Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)\n- Surau and car parking close to tapak\n- WiFi (Celcom/Digi signal is best)\n- Guided ATV tours, archery, and other seasonal activities.`,
+                B: `⛺ *Campsite Facilities*\nWe provide:\n- 24-hour electricity plug points at each campsite (campers must bring own extension cables)\n- Individual firepits at each campsite\n- Toilets with water heaters (+soap) and washing areas\n- Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)\n- Surau and car parking close to tapak (parking fee: RM 2 per entry)\n- WiFi (Celcom/Digi signal is best)\n- Guided ATV tours, archery, and other seasonal activities.`,
                 C: `⏰ *Check-In & Check-Out Times*\n- Official Check-In: 2:00 PM\n- Official Check-Out: 12:00 PM (noon)\n- Early Check-In: If the date before has no occupied camper at your chosen site (and there is no maintenance work), early check-in is usually possible after 10:30 AM. We will inform you of the earliest check-in time before your arrival day.\n- Late Check-Out: If there is no incoming booking scheduled for your site, check-out can be extended up to 4:00 PM.`
             }
         },

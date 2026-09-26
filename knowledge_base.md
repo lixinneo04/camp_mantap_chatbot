@@ -10,7 +10,7 @@ We provide:
 - Firepits at each campsite
 - Toilets with water heaters (+soap) and washing areas
 - Self-service Mini Mart (selling ice, firewood, charcoal, snacks, drinks, etc.)
-- Surau and close-by car parking
+- Surau and close-by car parking (parking fee: RM 2 per entry)
 - WiFi (Celcom/Digi)
 - Guided ATV tours (RM 70 per car), archery, and other seasonal activities
 
@@ -26,7 +26,7 @@ Ada kemudahan:
 - Washing area (+sabun)
 - Mini mart + kayu api
 - Surau
-- Car park dekat tapak
+- Car park dekat tapak (yuran parkir: RM 2 setiap kemasukan)
 - WIFI disediakan (hanya celcom/digi ada signal)
 - Nikmati aktiviti kami - ATV, memanah dan lain-lain. ATV Harga - RM 70.00 per car
 - Camping Service Package Rental & etc
@@ -63,6 +63,12 @@ Ada kemudahan:
 - Guided ATV tours only: 45 minutes duration.
 - Pricing: RM 70.00 per car.
 - Weight limits: Max 90kg for 125cc ATVs, max 110kg for 180cc ATVs.
+
+## Parking
+- Car parking is available close to the campsites.
+- Parking fee: RM 2 per entry.
+- Parkir kereta disediakan berdekatan dengan tapak perkhemahan.
+- Yuran parkir: RM 2 setiap kemasukan.
 
 ## Camper Van, Motorhome & RV Policy
 - Camper vans, Motorhomes, and RVs are NOT recommended/suitable at Camp Mantap due to:
