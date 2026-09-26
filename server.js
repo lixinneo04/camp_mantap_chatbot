@@ -304,6 +304,55 @@ function setCachedLang(phoneNumber, lang) {
 }
 
 /**
+ * In-memory state cache to ensure 100% reliable state transitions between instant turns,
+ * even if database history has replication lag, latency, or transient connection errors.
+ * { phoneNumber → { level: 1|2, lang: 'en'|'bm', menu: string|null, lastActivityMs: number } }
+ */
+const userStateCache = new Map();
+
+function getCachedState(phoneNumber) {
+    if (!phoneNumber) return null;
+    const entry = userStateCache.get(phoneNumber);
+    if (!entry) return null;
+    if (Date.now() - entry.lastActivityMs > SESSION_TTL_MS) {
+        userStateCache.delete(phoneNumber);
+        return null;
+    }
+    return entry;
+}
+
+function setCachedState(phoneNumber, stateObj) {
+    if (!phoneNumber) return;
+    userStateCache.set(phoneNumber, {
+        level: stateObj.level ?? 1,
+        lang: stateObj.lang || getCachedLang(phoneNumber) || 'bm',
+        menu: stateObj.menu || null,
+        lastActivityMs: Date.now()
+    });
+}
+
+function resolveCurrentState(sender, existingHistory) {
+    const historyState = getChatState(existingHistory);
+    const cachedState = getCachedState(sender);
+
+    // If we have an active in-memory cached state, prioritize its menu and level
+    // because it was explicitly set by the last turn in this server process
+    if (cachedState && cachedState.level) {
+        return {
+            level: cachedState.level,
+            lang: getCachedLang(sender) || cachedState.lang || historyState.lang || 'bm',
+            menu: cachedState.menu || historyState.menu || null
+        };
+    }
+
+    return {
+        level: historyState.level,
+        lang: getCachedLang(sender) || historyState.lang || 'bm',
+        menu: historyState.menu || null
+    };
+}
+
+/**
  * Returns true if this is a "first message" — either:
  *   - No conversation history exists (brand-new customer), OR
  *   - More than SESSION_TTL_MS has elapsed since the last DB row.
@@ -556,6 +605,147 @@ function isGoBackCommand(input, menu) {
     };
 
     return menu && goBackLetters[menu] === cleaned;
+}
+
+function getMenuGoBackLetter(menu) {
+    const map = {
+        general: 'E',
+        campsites: 'C',
+        tents: 'E',
+        activities: 'D',
+        rules: 'F',
+        booking: 'C',
+        photos: 'F',
+        availability: '0'
+    };
+    return map[menu] || '0';
+}
+
+/**
+ * Resolves a customer's submenu response to a letter option ('A', 'B', 'C', etc.).
+ * Supports:
+ *   1. Pure letters ('A', 'a', 'A.', '(A)', '[A]')
+ *   2. Prefix + letter ('Option A', 'Pilih B', 'Nak C')
+ *   3. Letter + title ('A. Location', 'A. Lokasi', 'B. Campsite Facilities')
+ *   4. Submenu keywords alone ('Location', 'Kemudahan', 'Check in', 'Camp layout')
+ *   5. Digits 1..6 mapped to A..F within that specific submenu
+ */
+function resolveSubmenuLetter(text, menu, lang) {
+    if (!text || typeof text !== 'string' || !menu) return null;
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    // 1. Pure letter: A, B, C, D, E, F (alone, or with punctuation like A., (A), [A], #A)
+    const pureLetterMatch = trimmed.match(/^[\(\[\{#]?\s*([A-F])\s*[\.\)\-\]\}\:]?$/i);
+    if (pureLetterMatch) {
+        return pureLetterMatch[1].toUpperCase();
+    }
+
+    // 2. Prefix + letter: "option A", "pilih B", "nak C", "saya nak D"
+    const prefixMatch = trimmed.match(/^(?:option|opt\.?|pilihan|pilih|nak|saya\s+nak|i\s+choose|i\s+want)\s*#?\s*([A-F])[\.\)\-]?$/i);
+    if (prefixMatch) {
+        return prefixMatch[1].toUpperCase();
+    }
+
+    // 3. Letter followed by title / text: "A. Location", "A. Lokasi", "B - Facilities", "C: Check in", "D Pelan Kawasan", "E Go Back"
+    const letterWithTextMatch = trimmed.match(/^([A-F])[\.\)\-\:\s]+.+/i);
+    if (letterWithTextMatch) {
+        return letterWithTextMatch[1].toUpperCase();
+    }
+
+    // 4. Keyword matching per menu topic
+    const lower = cleanText(trimmed).toLowerCase();
+
+    if (menu === 'general') {
+        if (/\b(?:location|lokasi|direction|arah|maps?|google\s*maps?)\b/i.test(lower)) return 'A';
+        if (/\b(?:facilities|kemudahan|plug|tandas|toilet|water\s*heater|surau|wifi)\b/i.test(lower)) return 'B';
+        if (/\b(?:check[\s-]?in|check[\s-]?out|waktu|masa|time|hours)\b/i.test(lower)) return 'C';
+        if (/\b(?:layout|pelan|peta|map|compound)\b/i.test(lower)) return 'D';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'E';
+    } else if (menu === 'campsites') {
+        if (/\b(?:pricing|harga|all\s*sizes|semua\s*saiz|standard|medium|family|rm\s*100|rm\s*130|rm\s*160)\b/i.test(lower)) return 'A';
+        if (/\b(?:additional|pax|extra|tents?\s*policy|polisi\s*khemah|khemah\s*sendiri|infants?)\b/i.test(lower)) return 'B';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'C';
+    } else if (menu === 'tents') {
+        if (/\b(?:style\s*a|payung\s*village\s*l|village\s*l)\b/i.test(lower)) return 'A';
+        if (/\b(?:style\s*b|payung\s*village\s*t|village\s*t|xl)\b/i.test(lower)) return 'B';
+        if (/\b(?:style\s*c|dome)\b/i.test(lower)) return 'C';
+        if (/\b(?:amenities|kemudahan|bantal|tilam|mattress|fan|kipas|lampu|kerusi|meja)\b/i.test(lower)) return 'D';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'E';
+    } else if (menu === 'activities') {
+        if (/\b(?:atv|tours?|lawatan|ride)\b/i.test(lower)) return 'A';
+        if (/\b(?:archery|memanah|panah|fruits?|buah|durians?|musim)\b/i.test(lower)) return 'B';
+        if (/\b(?:mini\s*mart|mart|kedai|ice|ais|charcoal|arang|kayu\s*api|snacks)\b/i.test(lower)) return 'C';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'D';
+    } else if (menu === 'rules') {
+        if (/\b(?:cancel|cancellation|refund|pembatalan|pulang|bayaran\s*balik)\b/i.test(lower)) return 'A';
+        if (/\b(?:reschedul|penjadualan|tukar\s*tarikh|change\s*date)\b/i.test(lower)) return 'B';
+        if (/\b(?:electricity|elektrik|plug|power|watt|hair\s*dryer|rice\s*cooker|ev)\b/i.test(lower)) return 'C';
+        if (/\b(?:river|flood|sungai|banjir|safety|keselamatan|siren)\b/i.test(lower)) return 'D';
+        if (/\b(?:camper\s*van|motorhome|rv|caravan)\b/i.test(lower)) return 'E';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'F';
+    } else if (menu === 'booking') {
+        if (/\b(?:platform|platforms|booktapak|escabee|online)\b/i.test(lower)) return 'A';
+        if (/\b(?:policy|payment|polisi|bayaran|deposit|full\s*payment)\b/i.test(lower)) return 'B';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'C';
+    } else if (menu === 'photos') {
+        if (/\b(?:campsite|tapak)\b/i.test(lower)) return 'A';
+        if (/\b(?:camp\s*type|style|jenis\s*khemah)\b/i.test(lower)) return 'B';
+        if (/\b(?:river|scenery|pemandangan|suasana|view)\b/i.test(lower)) return 'C';
+        if (/\b(?:activities|fruits?|aktiviti|buah|durian|atv|archery)\b/i.test(lower)) return 'D';
+        if (/\b(?:videos?|tonton|rekod)\b/i.test(lower)) return 'E';
+        if (/\b(?:back|kembali|menu|balik)\b/i.test(lower)) return 'F';
+    }
+
+    // 5. If the user types a single digit 1..6 that corresponds to an option in this submenu:
+    const digitMatch = trimmed.match(/^([1-6])[\.\)\-]?$/);
+    if (digitMatch) {
+        const num = parseInt(digitMatch[1], 10);
+        const letterFromNum = String.fromCharCode(64 + num); // 1->'A', 2->'B', 3->'C', 4->'D', 5->'E', 6->'F'
+
+        const validOptions = {
+            general: ['A', 'B', 'C', 'D', 'E'],
+            campsites: ['A', 'B', 'C'],
+            tents: ['A', 'B', 'C', 'D', 'E'],
+            activities: ['A', 'B', 'C', 'D'],
+            rules: ['A', 'B', 'C', 'D', 'E', 'F'],
+            booking: ['A', 'B', 'C'],
+            photos: ['A', 'B', 'C', 'D', 'E', 'F']
+        };
+
+        if (validOptions[menu] && validOptions[menu].includes(letterFromNum)) {
+            return letterFromNum;
+        }
+    }
+
+    return null;
+}
+
+async function sendPricePosterSafe(to, styleLetter) {
+    try {
+        await sendPricePoster(to, styleLetter);
+    } catch (err) {
+        console.error('[Drive] Error in sendPricePoster:', err.message);
+    }
+}
+
+async function handleImageRequestSafe(to, type, text) {
+    try {
+        await handleImageRequest(to, type, text);
+    } catch (err) {
+        console.error('[Drive] Error in handleImageRequest:', err.message);
+        try {
+            await sendTextMessage(to, "Sorry, photos are temporarily unavailable. 😔\nMaaf, foto tidak tersedia buat masa ini.");
+        } catch (_) {}
+    }
+}
+
+async function handleVideoRequestSafe(to, lang) {
+    try {
+        await handleVideoRequest(to, lang);
+    } catch (err) {
+        console.error('[Drive] Error in handleVideoRequest:', err.message);
+    }
 }
 
 function isRequestingHuman(text) {
