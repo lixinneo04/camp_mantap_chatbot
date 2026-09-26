@@ -1306,7 +1306,9 @@ app.post("/webhook", async (req, res) => {
                     console.log(`[Handoff] Human contact request detected from ${sender}`);
                     replyMsg = HUMAN_HANDOFF_MESSAGE;
                 } else {
-                    const state = getChatState(existingHistory);
+                    // Use resolveCurrentState to get state from in-memory cache first,
+                    // falling back to DB history — prevents submenu failures from Supabase lag.
+                    const state = resolveCurrentState(sender, existingHistory);
 
                     // Effective language: in-memory cache → history-detected → default BM
                     let lang = getCachedLang(sender) || state.lang || 'bm';
@@ -1318,107 +1320,124 @@ app.post("/webhook", async (req, res) => {
                         setCachedLang(sender, lang);
                     }
 
-                    // ── 2. Prioritize Number 1–8 selection (HIGHEST USER PRIORITY) ──────
-                    // Ensures the chatbot immediately understands options 1-8 regardless of
-                    // session state, submenu level, first message, or timeout.
-                    const menuChoice = extractMenuNumber(text);
-                    if (menuChoice !== null && menuChoice >= 1 && menuChoice <= 8) {
-                        console.log(`[Menu] Option #${menuChoice} prioritized for ${sender} (lang: ${lang})`);
-                        setCachedLang(sender, lang);
+                    // ── 2. Sub-menu lettered options (A–F) ───────────────────────────────
+                    // Check BEFORE 1–8 so that a user inside a sub-menu can type A/B/C/etc.
+                    // without being routed to the main menu by accident.
+                    const submenuOption = (state.level === 2 && state.menu)
+                        ? resolveSubmenuLetter(text, state.menu, lang)
+                        : null;
 
-                        const menuKeys = {
-                            1: 'general',
-                            2: 'campsites',
-                            3: 'tents',
-                            4: 'activities',
-                            5: 'rules',
-                            6: 'booking',
-                            7: 'photos',
-                            8: 'availability'
-                        };
-                        const selectedMenu = menuKeys[menuChoice];
-                        replyMsg = MENUS[lang][selectedMenu].prompt;
-
-                    } else if (isGoBackCommand(text, state.menu)) {
-                        // ── 3. Go back / Return to Main Menu ─────────────────────────────
-                        console.log(`[Menu] Go back to main menu for ${sender} (lang: ${lang})`);
-                        replyMsg = MENUS[lang].mainMenu;
-
-                    } else if (state.level === 2) {
-                        // ── 4. Sub-menu lettered options (A–F) ───────────────────────────
-                        const menu = state.menu || 'general';
+                    if (submenuOption !== null) {
+                        const menu = state.menu;
                         const subMenuObj = MENUS[lang][menu];
+                        const goBackLetter = getMenuGoBackLetter(menu);
 
-                        // Extract option letter cleanly (supports A, a, A., (A), Option A, etc.)
-                        const letterMatch = text.trim().match(/^(?:option\s*|opt\.?\s*|pilihan\s*|pilih\s*|nak\s*)?([A-F])[\.\)\-]?$/i);
-                        const optionKey = letterMatch ? letterMatch[1].toUpperCase() : text.trim().toUpperCase();
+                        console.log(`[Submenu] ${sender} in '${menu}' chose '${submenuOption}' (lang: ${lang})`);
 
-                        if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
-                            // Valid lettered pick → show answer then repeat sub-menu
-                            const answer = subMenuObj.answers[optionKey];
+                        if (submenuOption === goBackLetter || isGoBackCommand(submenuOption, menu)) {
+                            // Go back to main menu
+                            replyMsg = MENUS[lang].mainMenu;
+                            setCachedState(sender, { level: 1, lang, menu: null });
 
-                            if (menu === 'campsites' && optionKey === 'A') {
-                                // Combined campsite pricing: text + Drive price poster
+                        } else if (subMenuObj && subMenuObj.answers && subMenuObj.answers[submenuOption]) {
+                            // Valid answer option
+                            const answer = subMenuObj.answers[submenuOption];
+
+                            if (menu === 'campsites' && submenuOption === 'A') {
                                 await sendTextMessage(sender, answer);
                                 await new Promise(r => setTimeout(r, 500));
-                                await sendPricePoster(sender, null);
+                                await sendPricePosterSafe(sender, null);
                                 await new Promise(r => setTimeout(r, 500));
                                 replyMsg = subMenuObj.prompt;
-                            } else if (menu === 'tents' && ['A', 'B', 'C'].includes(optionKey)) {
-                                // Tent style: text + Drive style poster
+                            } else if (menu === 'tents' && ['A', 'B', 'C'].includes(submenuOption)) {
                                 await sendTextMessage(sender, answer);
                                 await new Promise(r => setTimeout(r, 500));
-                                await sendPricePoster(sender, optionKey);
+                                await sendPricePosterSafe(sender, submenuOption);
                                 await new Promise(r => setTimeout(r, 500));
                                 replyMsg = subMenuObj.prompt;
                             } else {
                                 replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
                             }
-                        } else if (menu === 'general' && optionKey === 'D') {
-                            // Map image from public/images/misc/
+                            setCachedState(sender, { level: 2, lang, menu });
+
+                        } else if (menu === 'general' && submenuOption === 'D') {
+                            // Camp layout map image
                             console.log(`[Images Menu] Sending map image to ${sender}`);
-                            await handleImageRequest(sender, 'map', text);
+                            await handleImageRequestSafe(sender, 'map', text);
                             await new Promise(r => setTimeout(r, 1000));
                             replyMsg = subMenuObj.prompt;
-                        } else if (menu === 'photos' && ['A', 'B', 'C', 'D', 'E'].includes(optionKey)) {
-                            const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv', 'E': 'video' };
-                            const type = imageTypeMap[optionKey];
-                            console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
+                            setCachedState(sender, { level: 2, lang, menu });
 
-                            if (optionKey === 'D') {
-                                await handleImageRequest(sender, 'atv', text);
+                        } else if (menu === 'photos' && ['A', 'B', 'C', 'D', 'E'].includes(submenuOption)) {
+                            console.log(`[Images Menu] Sending photos/${submenuOption} to ${sender}`);
+
+                            if (submenuOption === 'D') {
+                                await handleImageRequestSafe(sender, 'atv', text);
                                 await new Promise(r => setTimeout(r, 800));
-                                await handleImageRequest(sender, 'archery', text);
+                                await handleImageRequestSafe(sender, 'archery', text);
                                 await new Promise(r => setTimeout(r, 800));
-                                await handleImageRequest(sender, 'durian', text);
-                            } else if (optionKey === 'E') {
-                                await handleVideoRequest(sender, lang);
+                                await handleImageRequestSafe(sender, 'durian', text);
+                            } else if (submenuOption === 'E') {
+                                await handleVideoRequestSafe(sender, lang);
                             } else {
-                                await handleImageRequest(sender, type, text);
+                                const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery' };
+                                await handleImageRequestSafe(sender, imageTypeMap[submenuOption], text);
                             }
 
                             await new Promise(r => setTimeout(r, 1500));
                             replyMsg = subMenuObj.prompt;
+                            setCachedState(sender, { level: 2, lang, menu });
+
                         } else {
-                            // Free-text or unrecognised option at sub-menu → AI + FAQ menu
-                            console.log(`[Flow] Free-text at sub-menu for ${sender} → AI`);
+                            // Unrecognised option in submenu → AI + FAQ
+                            console.log(`[Flow] Unrecognised submenu option '${submenuOption}' for ${sender} → AI`);
+                            const aiText = await getAIReply(text, sender, existingHistory);
+                            replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
+                            setCachedState(sender, { level: 2, lang, menu });
+                        }
+
+                    // ── 3. Prioritize Number 1–8 selection ──────────────────────────────
+                    // Only reached when user is NOT already in an active sub-menu.
+                    } else {
+                        const menuChoice = extractMenuNumber(text);
+                        if (menuChoice !== null && menuChoice >= 1 && menuChoice <= 8) {
+                            console.log(`[Menu] Option #${menuChoice} for ${sender} (lang: ${lang})`);
+                            setCachedLang(sender, lang);
+
+                            const menuKeys = {
+                                1: 'general',
+                                2: 'campsites',
+                                3: 'tents',
+                                4: 'activities',
+                                5: 'rules',
+                                6: 'booking',
+                                7: 'photos',
+                                8: 'availability'
+                            };
+                            const selectedMenu = menuKeys[menuChoice];
+                            replyMsg = MENUS[lang][selectedMenu].prompt;
+                            setCachedState(sender, { level: 2, lang, menu: selectedMenu });
+
+                        } else if (isGoBackCommand(text, state.menu)) {
+                            // ── 4. Go back / Return to Main Menu ─────────────────────────
+                            console.log(`[Menu] Go back to main menu for ${sender} (lang: ${lang})`);
+                            replyMsg = MENUS[lang].mainMenu;
+                            setCachedState(sender, { level: 1, lang, menu: null });
+
+                        } else if (isInactiveSession(existingHistory)) {
+                            // ── 5. AI-First mode (first message or >1 hour inactivity) ───
+                            console.log(`[Flow] AI-first mode for ${sender} (new/inactive session)`);
+                            const aiResult = await getAIReply(text, sender, existingHistory, true);
+                            const detectedLang = aiResult.lang || lang || 'bm';
+                            setCachedLang(sender, detectedLang);
+                            replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
+
+                        } else {
+                            // ── 6. Free-text in Main Menu or elsewhere → AI + FAQ menu ───
+                            console.log(`[Flow] Free-text inquiry for ${sender} → AI`);
                             const aiText = await getAIReply(text, sender, existingHistory);
                             replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                         }
-
-                    } else if (isInactiveSession(existingHistory)) {
-                        // ── 5. AI-First mode (first message or >1 hour inactivity) ────────
-                        console.log(`[Flow] AI-first mode for ${sender} (new/inactive session)`);
-                        const aiResult = await getAIReply(text, sender, existingHistory, true);
-                        const detectedLang = aiResult.lang || lang || 'bm';
-                        setCachedLang(sender, detectedLang);
-                        replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
-
-                    } else {
-                        // ── 6. Free-text in Main Menu or elsewhere → AI answers + FAQ menu ─
-                        console.log(`[Flow] Free-text inquiry for ${sender} → AI`);
-                        const aiText = await getAIReply(text, sender, existingHistory);
-                        replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                     }
                 }
 
