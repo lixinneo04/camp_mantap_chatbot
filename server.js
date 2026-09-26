@@ -409,8 +409,137 @@ function getChatState(history) {
     return { level: 0, lang: null, menu: null };
 }
 
+function cleanText(text) {
+    if (!text || typeof text !== 'string') return '';
+    return text
+        .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Extracts a prioritized menu option number (1 to 8) from customer input.
+ * Handles pure numbers, prefixed numbers (e.g. 'no 1', 'nombor 8'),
+ * written number words ('satu', 'eight'), copied menu lines,
+ * and topic names (e.g. '1 general info', '8 availability').
+ * Returns 1-8 if matched, or null if normal free-text.
+ */
+function extractMenuNumber(text) {
+    if (!text || typeof text !== 'string') return null;
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    // 1. Exact digit: "1", " 1 ", "1.", "1)", "(1)", "[1]", "#1", "1-", etc.
+    const exactDigitMatch = trimmed.match(/^[\(\[\{#]?\s*([1-8])\s*[\.\)\-\]\}\:]?$/);
+    if (exactDigitMatch) {
+        return parseInt(exactDigitMatch[1], 10);
+    }
+
+    // 2. Selection prefix + digit:
+    // e.g. "no 1", "no. 1", "nombor 1", "number 1", "num 1", "option 1", "pilihan 1", "pilih 1", "nak 1", "saya nak 1", "menu 1"
+    const prefixDigitMatch = trimmed.match(/^(?:#\s*|no\.?\s*|nombor\s*|number\s*|num\.?\s*|option\s*|opt\.?\s*|pilihan\s*|pilih\s*(?:no\.?|nombor|number)?\s*|nak\s*(?:tengok|lihat|semak|no\.?|nombor|number)?\s*|saya\s+nak\s*(?:tengok|lihat|semak|no\.?|nombor|number)?\s*|saya\s+pilih\s*(?:no\.?|nombor|number)?\s*|tengok\s*(?:no\.?|nombor|number)?\s*|lihat\s*(?:no\.?|nombor|number)?\s*|i\s+choose\s*(?:no\.?|nombor|number|option)?\s*|i\s+want\s*(?:no\.?|nombor|number|option)?\s*|menu\s*|topik\s*|topic\s*)#?\s*([1-8])[\.\)\-]?$/i);
+    if (prefixDigitMatch) {
+        return parseInt(prefixDigitMatch[1], 10);
+    }
+
+    // 3. Written number words alone or with selection prefix:
+    // e.g. "satu", "nombor satu", "pilih satu", "eight", "option eight"
+    const WORD_TO_NUM = {
+        'satu': 1, 'one': 1,
+        'dua': 2, 'two': 2,
+        'tiga': 3, 'three': 3,
+        'empat': 4, 'four': 4,
+        'lima': 5, 'five': 5,
+        'enam': 6, 'six': 6,
+        'tujuh': 7, 'seven': 7,
+        'lapan': 8, 'eight': 8
+    };
+    const wordMatch = trimmed.match(/^(?:#\s*|no\.?\s*|nombor\s*|number\s*|option\s*|opt\.?\s*|pilihan\s*|pilih\s*|nak\s*|saya\s+nak\s*|saya\s+pilih\s*|i\s+choose\s*|i\s+want\s*|menu\s*)?(satu|dua|tiga|empat|lima|enam|tujuh|lapan|one|two|three|four|five|six|seven|eight)[\.\)\-]?$/i);
+    if (wordMatch) {
+        const word = wordMatch[1].toLowerCase();
+        if (WORD_TO_NUM[word]) return WORD_TO_NUM[word];
+    }
+
+    // Clean emojis for title and keyword matching
+    const noEmoji = cleanText(trimmed);
+
+    // 4. Number (1-8) at start followed by delimiter and topic title/keywords or copied menu line:
+    // e.g. "1. ℹ️ General Info, Location & Facilities", "8. 📅 Availability", "1 general info", "2 tapak", etc.
+    const topicPatterns = [
+        { num: 1, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?1[\.\)\-\:\s]+(?:general|info|information|maklumat|location|lokasi|facilities|kemudahan)\b/i },
+        { num: 2, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?2[\.\)\-\:\s]+(?:campsites?|pricing|tapak|harga)\b/i },
+        { num: 3, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?3[\.\)\-\:\s]+(?:tents?|rental|packages?|sewa|khemah|pakej)\b/i },
+        { num: 4, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?4[\.\)\-\:\s]+(?:activities|aktiviti|mini\s*mart|mart)\b/i },
+        { num: 5, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?5[\.\)\-\:\s]+(?:rules?|safety|policies|policy|peraturan|keselamatan|polisi)\b/i },
+        { num: 6, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?6[\.\)\-\:\s]+(?:booking|registration|register|tempahan|pendaftaran|daftar)\b/i },
+        { num: 7, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?7[\.\)\-\:\s]+(?:photos?|media|foto|gambar|videos?)\b/i },
+        { num: 8, regex: /^(?:#\s*|no\.?\s*|nombor\s*)?8[\.\)\-\:\s]+(?:availability|availabilities|semakan|kekosongan|ketersediaan)\b/i }
+    ];
+
+    for (const item of topicPatterns) {
+        if (item.regex.test(noEmoji) || item.regex.test(trimmed)) {
+            return item.num;
+        }
+    }
+
+    // 5. Exact full menu topic title matched alone (with or without emojis):
+    const titleOnlyPatterns = [
+        { num: 1, regex: /^(?:general\s+info(?:,\s*location\s*&\s*facilities)?|maklumat\s+am(?:,\s*lokasi\s*&\s*kemudahan)?)$/i },
+        { num: 2, regex: /^(?:campsites?\s*&\s*pricing(?:\s*\(tapak\))?|tapak\s+perkhemahan\s*&\s*harga(?:\s*\(tapak\))?)$/i },
+        { num: 3, regex: /^(?:tent\s+rental\s+packages?(?:\s*\(sewa\s+khemah\))?|pakej\s+sewa\s+khemah)$/i },
+        { num: 4, regex: /^(?:activities\s*&\s*mini\s*mart|aktiviti\s*&\s*mini\s*mart)$/i },
+        { num: 5, regex: /^(?:rules,?\s*safety\s*&\s*policies|peraturan,?\s*keselamatan\s*&\s*polisi)$/i },
+        { num: 6, regex: /^(?:booking\s*&\s*registration|tempahan\s*&\s*pendaftaran)$/i },
+        { num: 7, regex: /^(?:photos?\s*&\s*media|foto\s*&\s*media)$/i },
+        { num: 8, regex: /^(?:availability|semakan\s+kekosongan(?:\s*\(availability\))?)$/i }
+    ];
+
+    for (const item of titleOnlyPatterns) {
+        if (item.regex.test(noEmoji)) {
+            return item.num;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Detect language based on keywords in the message.
+ * Returns 'en', 'bm', or null if neutral/undetectable.
+ */
+function detectMessageLanguage(text) {
+    if (!text || typeof text !== 'string') return null;
+    const lower = text.toLowerCase();
+
+    const enPatterns = [
+        /\b(?:general\s+info|campsites?|tent\s+rental|activities|rules|safety|policies|booking|registration|photos?|media|availability)\b/i,
+        /\b(?:location|facilities|pricing|packages?|mini\s*mart|cancel|refund|reschedul|electricity)\b/i,
+        /\b(?:hello|hi|please|thank\s*you|thanks|good\s+morning|good\s+afternoon|good\s+evening)\b/i,
+        /\b(?:what|where|when|which|who|how|can\s+i|could\s+you|is\s+there|are\s+there)\b/i,
+        /\b(?:number|option|choice|choose)\b/i
+    ];
+
+    const bmPatterns = [
+        /\b(?:maklumat\s+am|tapak(?:\s+perkhemahan)?|sewa\s+khemah|aktiviti|peraturan|keselamatan|polisi|tempahan|pendaftaran|foto|gambar|semakan\s+kekosongan|kekosongan|ketersediaan)\b/i,
+        /\b(?:lokasi|kemudahan|harga|pakej|mini\s*mart|batal|pulang|bayaran\s+balik|jadual|elektrik)\b/i,
+        /\b(?:hai|salam|terima\s*kasih|selamat\s+pagi|selamat\s+petang|selamat\s+malam)\b/i,
+        /\b(?:apa|mana|bila|macam\s+mana|bagaimana|boleh\s+tak|boleh\s+ke|ada\s+tak|adakah)\b/i,
+        /\b(?:nombor|pilihan|pilih|nak|saya|tengok|lihat|semak)\b/i
+    ];
+
+    let enScore = 0;
+    let bmScore = 0;
+    for (const p of enPatterns) { if (p.test(lower)) enScore++; }
+    for (const p of bmPatterns) { if (p.test(lower)) bmScore++; }
+
+    if (enScore > bmScore) return 'en';
+    if (bmScore > enScore) return 'bm';
+    return null;
+}
+
 function isGoBackCommand(input, menu) {
-    const cleaned = input.trim().toLowerCase();
+    if (!input || typeof input !== 'string') return false;
+    const cleaned = input.trim().toLowerCase().replace(/[\.\)\-\(\[\]\{\}]/g, '').trim();
     if (cleaned === '0' || cleaned === '00' || cleaned === 'back' || cleaned === 'kembali' || cleaned === 'menu' || cleaned === 'main') {
         return true;
     }
@@ -426,7 +555,7 @@ function isGoBackCommand(input, menu) {
         availability: '0'
     };
 
-    return goBackLetters[menu] === cleaned;
+    return menu && goBackLetters[menu] === cleaned;
 }
 
 function isRequestingHuman(text) {
@@ -987,126 +1116,119 @@ app.post("/webhook", async (req, res) => {
                     console.log(`[Handoff] Human contact request detected from ${sender}`);
                     replyMsg = HUMAN_HANDOFF_MESSAGE;
                 } else {
-                    const normalizedInput = text.trim().toLowerCase();
                     const state = getChatState(existingHistory);
 
                     // Effective language: in-memory cache → history-detected → default BM
-                    const sessionLang = getCachedLang(sender) || state.lang || 'bm';
+                    let lang = getCachedLang(sender) || state.lang || 'bm';
 
-                    // ── 2. First-message / re-entry check ────────────────────────────────
-                    // Triggers AI-first mode when:
-                    //   a) Brand-new customer (no history), OR
-                    //   b) Customer has been silent for > 1 hour.
-                    const firstMsg = isInactiveSession(existingHistory);
+                    // Update language if the message clearly indicates English or Malay
+                    const detectedLangFromMsg = detectMessageLanguage(text);
+                    if (detectedLangFromMsg) {
+                        lang = detectedLangFromMsg;
+                        setCachedLang(sender, lang);
+                    }
 
-                    if (firstMsg) {
-                        // ── AI-FIRST MODE ───────────────────────────────────────────────
-                        // Gemini answers the question naturally, detects EN/BM, then we
-                        // append the FAQ main menu so the customer can drill deeper.
-                        console.log(`[Flow] AI-first mode for ${sender} (new/inactive session)`);
-                        const aiResult = await getAIReply(text, sender, existingHistory, true);
-                        const detectedLang = aiResult.lang || 'bm';
-                        setCachedLang(sender, detectedLang);
-                        replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
+                    // ── 2. Prioritize Number 1–8 selection (HIGHEST USER PRIORITY) ──────
+                    // Ensures the chatbot immediately understands options 1-8 regardless of
+                    // session state, submenu level, first message, or timeout.
+                    const menuChoice = extractMenuNumber(text);
+                    if (menuChoice !== null && menuChoice >= 1 && menuChoice <= 8) {
+                        console.log(`[Menu] Option #${menuChoice} prioritized for ${sender} (lang: ${lang})`);
+                        setCachedLang(sender, lang);
 
-                    } else if (state.level === 1) {
-                        // ── MAIN MENU: numbered option picks (1–8) ───────────────────────
-                        const lang = state.lang || sessionLang;
-                        if (normalizedInput === '1') {
-                            replyMsg = MENUS[lang].general.prompt;
-                        } else if (normalizedInput === '2') {
-                            replyMsg = MENUS[lang].campsites.prompt;
-                        } else if (normalizedInput === '3') {
-                            replyMsg = MENUS[lang].tents.prompt;
-                        } else if (normalizedInput === '4') {
-                            replyMsg = MENUS[lang].activities.prompt;
-                        } else if (normalizedInput === '5') {
-                            replyMsg = MENUS[lang].rules.prompt;
-                        } else if (normalizedInput === '6') {
-                            replyMsg = MENUS[lang].booking.prompt;
-                        } else if (normalizedInput === '7') {
-                            replyMsg = MENUS[lang].photos.prompt;
-                        } else if (normalizedInput === '8') {
-                            replyMsg = MENUS[lang].availability.prompt;
+                        const menuKeys = {
+                            1: 'general',
+                            2: 'campsites',
+                            3: 'tents',
+                            4: 'activities',
+                            5: 'rules',
+                            6: 'booking',
+                            7: 'photos',
+                            8: 'availability'
+                        };
+                        const selectedMenu = menuKeys[menuChoice];
+                        replyMsg = MENUS[lang][selectedMenu].prompt;
+
+                    } else if (isGoBackCommand(text, state.menu)) {
+                        // ── 3. Go back / Return to Main Menu ─────────────────────────────
+                        console.log(`[Menu] Go back to main menu for ${sender} (lang: ${lang})`);
+                        replyMsg = MENUS[lang].mainMenu;
+
+                    } else if (state.level === 2) {
+                        // ── 4. Sub-menu lettered options (A–F) ───────────────────────────
+                        const menu = state.menu || 'general';
+                        const subMenuObj = MENUS[lang][menu];
+
+                        // Extract option letter cleanly (supports A, a, A., (A), Option A, etc.)
+                        const letterMatch = text.trim().match(/^(?:option\s*|opt\.?\s*|pilihan\s*|pilih\s*|nak\s*)?([A-F])[\.\)\-]?$/i);
+                        const optionKey = letterMatch ? letterMatch[1].toUpperCase() : text.trim().toUpperCase();
+
+                        if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
+                            // Valid lettered pick → show answer then repeat sub-menu
+                            const answer = subMenuObj.answers[optionKey];
+
+                            if (menu === 'campsites' && optionKey === 'A') {
+                                // Combined campsite pricing: text + Drive price poster
+                                await sendTextMessage(sender, answer);
+                                await new Promise(r => setTimeout(r, 500));
+                                await sendPricePoster(sender, null);
+                                await new Promise(r => setTimeout(r, 500));
+                                replyMsg = subMenuObj.prompt;
+                            } else if (menu === 'tents' && ['A', 'B', 'C'].includes(optionKey)) {
+                                // Tent style: text + Drive style poster
+                                await sendTextMessage(sender, answer);
+                                await new Promise(r => setTimeout(r, 500));
+                                await sendPricePoster(sender, optionKey);
+                                await new Promise(r => setTimeout(r, 500));
+                                replyMsg = subMenuObj.prompt;
+                            } else {
+                                replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
+                            }
+                        } else if (menu === 'general' && optionKey === 'D') {
+                            // Map image from public/images/misc/
+                            console.log(`[Images Menu] Sending map image to ${sender}`);
+                            await handleImageRequest(sender, 'map', text);
+                            await new Promise(r => setTimeout(r, 1000));
+                            replyMsg = subMenuObj.prompt;
+                        } else if (menu === 'photos' && ['A', 'B', 'C', 'D', 'E'].includes(optionKey)) {
+                            const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv', 'E': 'video' };
+                            const type = imageTypeMap[optionKey];
+                            console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
+
+                            if (optionKey === 'D') {
+                                await handleImageRequest(sender, 'atv', text);
+                                await new Promise(r => setTimeout(r, 800));
+                                await handleImageRequest(sender, 'archery', text);
+                                await new Promise(r => setTimeout(r, 800));
+                                await handleImageRequest(sender, 'durian', text);
+                            } else if (optionKey === 'E') {
+                                await handleVideoRequest(sender, lang);
+                            } else {
+                                await handleImageRequest(sender, type, text);
+                            }
+
+                            await new Promise(r => setTimeout(r, 1500));
+                            replyMsg = subMenuObj.prompt;
                         } else {
-                            // Free-text at main menu level → AI answers + FAQ menu
-                            console.log(`[Flow] Free-text at main menu for ${sender} → AI`);
+                            // Free-text or unrecognised option at sub-menu → AI + FAQ menu
+                            console.log(`[Flow] Free-text at sub-menu for ${sender} → AI`);
                             const aiText = await getAIReply(text, sender, existingHistory);
                             replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                         }
 
-                    } else if (state.level === 2) {
-                        // ── SUB-MENU: lettered option picks ──────────────────────────────
-                        const lang = state.lang || sessionLang;
-                        const menu = state.menu || 'general';
-
-                        if (isGoBackCommand(text, menu)) {
-                            replyMsg = MENUS[lang].mainMenu;
-                        } else {
-                            const subMenuObj = MENUS[lang][menu];
-                            const optionKey = text.trim().toUpperCase();
-
-                            if (subMenuObj && subMenuObj.answers && subMenuObj.answers[optionKey]) {
-                                // Valid lettered pick → show answer then repeat sub-menu
-                                const answer = subMenuObj.answers[optionKey];
-
-                                if (menu === 'campsites' && optionKey === 'A') {
-                                    // Combined campsite pricing: text + Drive price poster
-                                    await sendTextMessage(sender, answer);
-                                    await new Promise(r => setTimeout(r, 500));
-                                    await sendPricePoster(sender, null);
-                                    await new Promise(r => setTimeout(r, 500));
-                                    replyMsg = subMenuObj.prompt;
-                                } else if (menu === 'tents' && ['A', 'B', 'C'].includes(optionKey)) {
-                                    // Tent style: text + Drive style poster
-                                    await sendTextMessage(sender, answer);
-                                    await new Promise(r => setTimeout(r, 500));
-                                    await sendPricePoster(sender, optionKey);
-                                    await new Promise(r => setTimeout(r, 500));
-                                    replyMsg = subMenuObj.prompt;
-                                } else {
-                                    replyMsg = `${answer}\n\n---\n\n${subMenuObj.prompt}`;
-                                }
-                            } else if (menu === 'general' && optionKey === 'D') {
-                                // Map image from public/images/misc/
-                                console.log(`[Images Menu] Sending map image to ${sender}`);
-                                await handleImageRequest(sender, 'map', text);
-                                await new Promise(r => setTimeout(r, 1000));
-                                replyMsg = subMenuObj.prompt;
-                            } else if (menu === 'photos' && ['A', 'B', 'C', 'D', 'E'].includes(optionKey)) {
-                                const imageTypeMap = { 'A': 'campsite', 'B': 'camp', 'C': 'scenery', 'D': 'atv', 'E': 'video' };
-                                const type = imageTypeMap[optionKey];
-                                console.log(`[Images Menu] Sending ${type} photos to ${sender}`);
-
-                                if (optionKey === 'D') {
-                                    await handleImageRequest(sender, 'atv', text);
-                                    await new Promise(r => setTimeout(r, 800));
-                                    await handleImageRequest(sender, 'archery', text);
-                                    await new Promise(r => setTimeout(r, 800));
-                                    await handleImageRequest(sender, 'durian', text);
-                                } else if (optionKey === 'E') {
-                                    await handleVideoRequest(sender, lang);
-                                } else {
-                                    await handleImageRequest(sender, type, text);
-                                }
-
-                                await new Promise(r => setTimeout(r, 1500));
-                                replyMsg = subMenuObj.prompt;
-                            } else {
-                                // Free-text or unrecognised option at sub-menu → AI + FAQ menu
-                                console.log(`[Flow] Free-text at sub-menu for ${sender} → AI`);
-                                const aiText = await getAIReply(text, sender, existingHistory);
-                                replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
-                            }
-                        }
-
-                    } else {
-                        // ── NO STATE / UNKNOWN — treat as a fresh first message ───────────
-                        console.log(`[Flow] No prior state for ${sender} → AI-first fallback`);
+                    } else if (isInactiveSession(existingHistory)) {
+                        // ── 5. AI-First mode (first message or >1 hour inactivity) ────────
+                        console.log(`[Flow] AI-first mode for ${sender} (new/inactive session)`);
                         const aiResult = await getAIReply(text, sender, existingHistory, true);
-                        const detectedLang = aiResult.lang || 'bm';
+                        const detectedLang = aiResult.lang || lang || 'bm';
                         setCachedLang(sender, detectedLang);
                         replyMsg = `${aiResult.text}\n\n---\n\n${buildFaqMenu(detectedLang)}`;
+
+                    } else {
+                        // ── 6. Free-text in Main Menu or elsewhere → AI answers + FAQ menu ─
+                        console.log(`[Flow] Free-text inquiry for ${sender} → AI`);
+                        const aiText = await getAIReply(text, sender, existingHistory);
+                        replyMsg = `${aiText}\n\n---\n\n${buildFaqMenu(lang)}`;
                     }
                 }
 
@@ -1939,5 +2061,5 @@ if (process.env.NODE_ENV !== 'test') {
         console.log(`Server running on port ${PORT}`);
     });
 } else {
-    module.exports = { MENUS, getChatState, isGoBackCommand, isRequestingHuman };
+    module.exports = { MENUS, getChatState, isGoBackCommand, isRequestingHuman, extractMenuNumber, detectMessageLanguage };
 }

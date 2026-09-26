@@ -26,23 +26,33 @@ sequenceDiagram
     
     Srv->>Srv: Resolve state (Level, Language, Active Menu) from history & cache
     
-    alt Session Inactive (>1 hour) or Brand New Customer
+    alt Customer selected Number 1-8 (Highest Priority)
+        Srv->>Srv: Prioritized Menu Option (1-8): Route directly to corresponding Submenu Prompt
+        Srv->>WA: Sends Submenu prompt
+    else Choice is 'Go Back' (0 / back / kembali / menu / submenu letter)
+        Srv->>Srv: Transition back to Main Menu
+        Srv->>WA: Sends Main Menu
+    else State is Level 2 (Submenus)
+        alt Choice is Lettered Option (A-F)
+            alt Choice is Photo/Media Option
+                Srv->>Drive: Retrieve file list (uses in-memory cache)
+                Drive-->>Srv: Return files (ID, Name, MIME)
+                loop For each media file
+                    Srv->>WA: Send media URL (proxied via /drive-image/:fileId)
+                end
+            else Standard FAQ Option
+                Srv->>WA: Send FAQ answer + repeat Submenu prompt
+            end
+        else Free-text at Submenu
+            Srv->>Srv: AI generates Gemini answer + Main Menu
+            Srv->>WA: Sends AI response + Main Menu
+        end
+    else Session Inactive (>1 hour) or Brand New Customer
         Srv->>Srv: AI-First Mode: Detects language & generates Gemini answer
         Srv->>WA: Sends AI response + Main Menu
-    else State is Level 0 (Welcome)
-        Srv->>Srv: Process Language Selection & Return Main Menu
-    else State is Level 1 (Main Menu)
-        Srv->>Srv: Route to Submenu Choice (1-8)
-    else State is Level 2 (Submenus)
-        alt Choice is 'Go Back'
-            Srv->>Srv: Transition back to Main Menu
-        else Choice is Photo/Media Option
-            Srv->>Drive: Retrieve file list (uses in-memory cache)
-            Drive-->>Srv: Return files (ID, Name, MIME)
-            loop For each media file
-                Srv->>WA: Send media URL (proxied via /drive-image/:fileId)
-            end
-        end
+    else Free-text in Main Menu
+        Srv->>Srv: AI generates Gemini answer + Main Menu
+        Srv->>WA: Sends AI response + Main Menu
     end
 
     Srv->>DB: Store user message & bot response in "conversations" table
@@ -180,21 +190,19 @@ The server exposes several diagnostic endpoints to ease debugging and verify int
     [Is human handoff requested?] ── Yes ───► [Send HUMAN_HANDOFF_MESSAGE] ──► (End)
                 │ No
                 ▼
-    [Resolve Active State (level, lang, menu) from last assistant message]
-                │
-                ├───────────────────────┬────────────────────────┐
-                ▼                       ▼                        ▼
-       [Level 0 (Welcome)]     [Level 1 (Main Menu)]    [Level 2 (Submenus)]
-                │                       │                        │
-       [Check lang selection]   [Check choice (1-8)]     [Check choice (A-F/0)]
-       - BM: Main Menu BM       - 1: Gen Info Menu       - standard FAQ text:
-       - EN: Main Menu EN       - ...                      Send answer + repeat submenu
-       - Else: Welcome Msg      - 8: Availability links  - Photo choice:
-                                                           Send photos + repeat submenu
-                                                         - Go Back:
-                                                           Send Main Menu
-                │                       │                        │
-                └───────────────────────┼────────────────────────┘
+    [Did customer type a number 1-8?] ── Yes ─► [Send Submenu Prompt (1-8)] ──► [Save & Send]
+                │ No
+                ▼
+    [Did customer send Go Back (0/back)?] ── Yes ─► [Send Main Menu] ──► [Save & Send]
+                │ No
+                ▼
+    [Is State Level 2 (Submenu)?] ────────── Yes ─► [Handle Letter (A-F) or AI Fallback]
+                │ No
+                ▼
+    [Is Session Inactive (>1h) / New?] ───── Yes ─► [AI-First Reply + Main Menu]
+                │ No
+                ▼
+    [Free-text Question in Main Menu] ───────► [AI Reply + Main Menu]
                                         │
                                         ▼
                          [Save conversation to Supabase]
