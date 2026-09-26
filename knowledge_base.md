@@ -1,6 +1,6 @@
 # CAMP MANTAP OFFICIAL KNOWLEDGE BASE
 
-## About Us & Services
+## About Us and Services
 I am the virtual WhatsApp assistant for Camp Mantap.
 Camp Mantap is a premium campsite located around 20-25 minutes drive from Bentong, Pahang, where all our campsites face a beautiful river.
 
