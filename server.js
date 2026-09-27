@@ -282,6 +282,115 @@ Taip 0 untuk kembali ke Menu Utama.`
 };
 
 // ---------------------------------------------------------------------------
+// Bot pause store — pause AI/FAQ for a specific customer for 24 hours
+// ---------------------------------------------------------------------------
+
+/** Duration of a pause in milliseconds (24 hours). */
+const BOT_PAUSE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * In-memory pause cache for fast lookups.
+ * { phoneNumber → expiresAtMs (epoch ms) }
+ * Populated on first check from DB, updated on pause/resume.
+ */
+const pauseCache = new Map();
+
+/**
+ * Returns true if the bot is currently paused for this customer.
+ * Checks in-memory cache first, then falls back to Supabase.
+ */
+async function isBotPaused(phoneNumber) {
+    // 1. Check in-memory cache first
+    const cached = pauseCache.get(phoneNumber);
+    if (cached !== undefined) {
+        if (cached > Date.now()) return true;
+        // Expired — remove from cache
+        pauseCache.delete(phoneNumber);
+        return false;
+    }
+
+    // 2. Fall back to Supabase
+    try {
+        const { data, error } = await supabase
+            .from('paused_bots')
+            .select('expires_at')
+            .eq('phone_number', phoneNumber)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[Pause] Supabase check error:', error.message);
+            return false; // fail open — don't block customer
+        }
+
+        if (!data) return false;
+
+        const expiresAtMs = new Date(data.expires_at).getTime();
+        if (expiresAtMs > Date.now()) {
+            pauseCache.set(phoneNumber, expiresAtMs); // populate cache
+            return true;
+        }
+
+        // Expired row — clean up
+        await supabase.from('paused_bots').delete().eq('phone_number', phoneNumber);
+        return false;
+    } catch (err) {
+        console.error('[Pause] isBotPaused error:', err.message);
+        return false;
+    }
+}
+
+/**
+ * Pause the bot for a given customer number for 24 hours.
+ */
+async function pauseBot(phoneNumber) {
+    const expiresAtMs = Date.now() + BOT_PAUSE_DURATION_MS;
+    const expiresAtISO = new Date(expiresAtMs).toISOString();
+
+    // Update in-memory cache immediately
+    pauseCache.set(phoneNumber, expiresAtMs);
+
+    // Upsert into Supabase
+    try {
+        const { error } = await supabase
+            .from('paused_bots')
+            .upsert(
+                { phone_number: phoneNumber, expires_at: expiresAtISO, paused_at: new Date().toISOString() },
+                { onConflict: 'phone_number' }
+            );
+        if (error) console.error('[Pause] Supabase upsert error:', error.message);
+        else console.log(`[Pause] Bot paused for ${phoneNumber} until ${expiresAtISO}`);
+    } catch (err) {
+        console.error('[Pause] pauseBot error:', err.message);
+    }
+}
+
+/**
+ * Resume (un-pause) the bot for a given customer number immediately.
+ */
+async function resumeBot(phoneNumber) {
+    pauseCache.delete(phoneNumber);
+
+    try {
+        const { error } = await supabase
+            .from('paused_bots')
+            .delete()
+            .eq('phone_number', phoneNumber);
+        if (error) console.error('[Pause] Supabase delete error:', error.message);
+        else console.log(`[Pause] Bot resumed for ${phoneNumber}`);
+    } catch (err) {
+        console.error('[Pause] resumeBot error:', err.message);
+    }
+}
+
+/**
+ * Normalise a raw number string: strip spaces, dashes, leading +.
+ * e.g. "+60 12-345 6789" → "60123456789"
+ */
+function normalisePhone(raw) {
+    return (raw || '').replace(/[\s\-\+]/g, '').trim();
+}
+
+// ---------------------------------------------------------------------------
 // Session management — language cache & inactivity tracking
 // ---------------------------------------------------------------------------
 
@@ -1295,11 +1404,59 @@ app.post("/webhook", async (req, res) => {
             console.log("Customer:", sender);
             console.log("Message:", text);
 
+            // ── Operator pause/resume commands ────────────────────────────────────
+            // Only the operator's own number can issue these commands.
+            const OPERATOR_NUMBER = normalisePhone(process.env.ALERT_PHONE_NUMBER || '');
+            const senderNormalised = normalisePhone(sender);
+
+            if (OPERATOR_NUMBER && senderNormalised === OPERATOR_NUMBER) {
+                // Check for: #PAUSE <number> or #RESUME <number>
+                const pauseMatch  = text.trim().match(/^#PAUSE\s+(\d+)$/i);
+                const resumeMatch = text.trim().match(/^#RESUME\s+(\d+)$/i);
+
+                if (pauseMatch) {
+                    const targetNumber = pauseMatch[1].trim();
+                    await pauseBot(targetNumber);
+                    const expiryStr = new Date(Date.now() + BOT_PAUSE_DURATION_MS)
+                        .toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
+                    const confirmMsg =
+                        `✅ *Bot Paused*\n\n` +
+                        `Customer: +${targetNumber}\n` +
+                        `Duration: 24 hours\n` +
+                        `Resumes at: ${expiryStr}\n\n` +
+                        `The AI/FAQ will not reply to this customer until then.\n` +
+                        `To resume early, send: *#RESUME ${targetNumber}*`;
+                    await sendTextMessage(sender, confirmMsg);
+                    return res.sendStatus(200);
+                }
+
+                if (resumeMatch) {
+                    const targetNumber = resumeMatch[1].trim();
+                    await resumeBot(targetNumber);
+                    const confirmMsg =
+                        `✅ *Bot Resumed*\n\n` +
+                        `Customer: +${targetNumber}\n` +
+                        `The AI/FAQ is now active again for this customer.`;
+                    await sendTextMessage(sender, confirmMsg);
+                    return res.sendStatus(200);
+                }
+
+                // Operator typed something else — don't run the bot for their own number
+                return res.sendStatus(200);
+            }
+            // ─────────────────────────────────────────────────────────────────────
+
             let replyMsg;
 
             try {
                 // Fetch conversation history
                 const existingHistory = await getConversationHistory(sender);
+
+                // ── 0. Bot pause check — silent if paused ─────────────────────────────
+                if (await isBotPaused(sender)) {
+                    console.log(`[Pause] Bot is paused for ${sender} — message silently ignored`);
+                    return res.sendStatus(200);
+                }
 
                 // ── 1. Human handoff check (highest priority) ─────────────────────────
                 if (isRequestingHuman(text)) {
