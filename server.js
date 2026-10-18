@@ -1977,7 +1977,15 @@ async function handleImageRequest(to, type, text = "") {
         }
         const styleSubfolders = await listDriveSubfolders(folderId);
         if (styleSubfolders.length === 0) {
-            await sendTextMessage(to, "Sorry, no camp type photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
+            // Fallback: images placed directly in the camp type folder (no Style subfolders)
+            const directImages = await listDriveImages(folderId);
+            if (directImages.length === 0) {
+                console.warn(`[Drive] Camp type folder ${folderId.slice(-8)} has no subfolders or images (check sharing with service account)`);
+                await sendTextMessage(to, "Sorry, no camp type photos are available at the moment. \ud83d\ude14\nMaaf, tiada gambar jenis khemah disediakan buat masa ini.");
+                return;
+            }
+            await sendTextMessage(to, `Here are our camp type photos! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto jenis khemah kami! \ud83d\udcf8\ud83c\udfd5\ufe0f\n\nTotal: ${directImages.length} photo(s) / foto`);
+            await sendDriveImages(directImages, f => `\ud83c\udfd5\ufe0f ${f.name}`);
             return;
         }
         await sendTextMessage(to, `Here are our camp type photos (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f\nBerikut adalah foto jenis khemah kami (Style A/B/C)! \ud83d\udcf8\ud83c\udfd5\ufe0f`);
