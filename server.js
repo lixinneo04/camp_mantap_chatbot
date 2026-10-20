@@ -1248,6 +1248,69 @@ app.get("/chat", async (req, res) => {
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Coexistence onboarding completion ────────────────────────────────────────
+// Called by public/coexistence.html after Embedded Signup finishes.
+// 1. Exchanges the short-lived `code` for a business integration token
+// 2. Subscribes this app to the client's WABA (so webhooks reach /webhook)
+// 3. Requests contacts + chat history sync from the Business app (best-effort;
+//    Meta only allows this within 24h of onboarding)
+// Requires META_APP_ID and META_APP_SECRET in .env.
+app.post("/coexistence/complete", async (req, res) => {
+    const { code, waba_id, phone_number_id } = req.body || {};
+    if (!code || !waba_id || !phone_number_id) {
+        return res.status(400).json({ ok: false, error: "code, waba_id and phone_number_id are required" });
+    }
+    if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
+        return res.status(500).json({ ok: false, error: "META_APP_ID / META_APP_SECRET not set on server" });
+    }
+
+    const graph = "https://graph.facebook.com/v25.0";
+    const steps = {};
+    try {
+        // 1. Code → business token
+        const tokenRes = await axios.get(`${graph}/oauth/access_token`, {
+            params: {
+                client_id: process.env.META_APP_ID,
+                client_secret: process.env.META_APP_SECRET,
+                code,
+            },
+        });
+        const businessToken = tokenRes.data.access_token;
+        steps.token_exchange = "ok";
+        const auth = { headers: { Authorization: `Bearer ${businessToken}` } };
+
+        // 2. Subscribe app to the WABA's webhooks
+        await axios.post(`${graph}/${waba_id}/subscribed_apps`, {}, auth);
+        steps.subscribed_apps = "ok";
+
+        // 3. Sync contacts + message history into the API side (best-effort)
+        for (const sync_type of ["smb_app_state_sync", "history"]) {
+            try {
+                await axios.post(`${graph}/${phone_number_id}/smb_app_data`,
+                    { messaging_product: "whatsapp", sync_type }, auth);
+                steps[sync_type] = "ok";
+            } catch (e) {
+                steps[sync_type] = e.response?.data?.error?.message || e.message;
+            }
+        }
+
+        // Token is only printed to server logs, never returned to the browser.
+        console.log("══════════ [Coexistence] Onboarding complete ══════════");
+        console.log(`WABA_ID=${waba_id}`);
+        console.log(`PHONE_NUMBER_ID=${phone_number_id}`);
+        console.log(`WHATSAPP_TOKEN=${businessToken}`);
+        console.log("Update PHONE_NUMBER_ID and WHATSAPP_TOKEN in .env / Railway, then restart.");
+        console.log("════════════════════════════════════════════════════════");
+
+        return res.json({ ok: true, waba_id, phone_number_id, steps });
+    } catch (err) {
+        const detail = err.response?.data?.error?.message || err.message;
+        console.error("[Coexistence] Onboarding failed:", err.response?.data || err.message);
+        return res.status(500).json({ ok: false, error: detail, steps });
+    }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Webhook verification (Meta calls this)
 app.get("/webhook", (req, res) => {
     const mode = req.query["hub.mode"];
@@ -1409,6 +1472,24 @@ app.post("/webhook", async (req, res) => {
 
         // Silently ignore delivery/read receipts
         if (value?.statuses) {
+            return res.sendStatus(200);
+        }
+
+        // ── Coexistence: owner replied manually from the WhatsApp Business app ──
+        // Meta sends `smb_message_echoes` for messages typed in the Business app
+        // (NOT for messages the bot sends via API). When the owner jumps into a
+        // chat, pause the bot for that customer so they don't talk over each other.
+        // Disable with AUTO_PAUSE_ON_OWNER_REPLY=false.
+        if (value?.message_echoes) {
+            const autoPause = (process.env.AUTO_PAUSE_ON_OWNER_REPLY || 'true').toLowerCase() !== 'false';
+            for (const echo of value.message_echoes) {
+                const customer = normalisePhone(echo.to);
+                console.log(`[Coexistence] Owner replied from Business app to ${customer}: ${echo.text?.body || `[${echo.type}]`}`);
+                if (autoPause && customer && !(await isBotPaused(customer))) {
+                    await pauseBot(customer);
+                    console.log(`[Coexistence] Bot auto-paused for ${customer} (owner took over)`);
+                }
+            }
             return res.sendStatus(200);
         }
 

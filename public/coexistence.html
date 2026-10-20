@@ -36,20 +36,48 @@
             console.log('Facebook SDK initialized');
         };
 
-        document.getElementById('connectBtn').addEventListener('click', function () {
+        // Collected from FB.login (code) and the Embedded Signup message event (IDs)
+        const signup = { code: null, waba_id: null, phone_number_id: null };
+        let submitted = false;
+
+        function show(obj) {
             document.getElementById('result').textContent =
-                'Opening Meta Embedded Signup...';
+                typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+        }
+
+        async function completeOnboardingIfReady() {
+            if (submitted || !signup.code || !signup.waba_id || !signup.phone_number_id) return;
+            submitted = true;
+            show('Finishing setup on server...');
+            try {
+                const r = await fetch('/coexistence/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(signup)
+                });
+                const data = await r.json();
+                show(data.ok
+                    ? { status: '✅ Connected! Bot chats will now appear in the WhatsApp Business app.', ...data }
+                    : { status: '❌ Setup failed', ...data });
+            } catch (err) {
+                submitted = false;
+                show('❌ Could not reach server: ' + err.message);
+            }
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', function () {
+            show('Opening Meta Embedded Signup...');
 
             FB.login(function (response) {
                 console.log('FB.login response:', response);
 
-                document.getElementById('result').textContent =
-                    JSON.stringify(response, null, 2);
-
-                if (response.authResponse) {
+                if (response.authResponse && response.authResponse.code) {
                     console.log('Facebook login successful');
+                    signup.code = response.authResponse.code;
+                    completeOnboardingIfReady();
                 } else {
                     console.log('Facebook login cancelled or failed');
+                    show(response);
                 }
             }, {
                 config_id: '923062280857767',
@@ -74,8 +102,15 @@
 
                 console.log('Embedded Signup event:', data);
 
-                document.getElementById('result').textContent =
-                    JSON.stringify(data, null, 2);
+                if (data.type === 'WA_EMBEDDED_SIGNUP') {
+                    if (String(data.event).startsWith('FINISH')) {
+                        signup.waba_id = data.data?.waba_id;
+                        signup.phone_number_id = data.data?.phone_number_id;
+                        completeOnboardingIfReady();
+                    } else if (data.event === 'CANCEL' || data.event === 'ERROR') {
+                        show(data);
+                    }
+                }
             } catch (error) {
                 // Ignore messages that are not JSON
             }
