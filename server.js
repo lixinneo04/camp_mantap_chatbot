@@ -1211,6 +1211,43 @@ app.get("/", (req, res) => {
     res.send("WhatsApp Webhook Server Running");
 });
 
+// ── Click-to-chat link ───────────────────────────────────────────────────────
+// Share https://<your-domain>/chat with customers. It redirects to
+// https://wa.me/<business_number>?text=<prefill>, which opens a WhatsApp chat
+// with the bot. Optional: /chat?text=Your+custom+message
+// Number source: WHATSAPP_DISPLAY_NUMBER in .env, otherwise fetched once from
+// Graph API (GET /<PHONE_NUMBER_ID>?fields=display_phone_number) and cached.
+const DEFAULT_CHAT_PREFILL = process.env.WHATSAPP_CHAT_PREFILL || "Hi Camp Mantap!";
+let cachedWaNumber = (process.env.WHATSAPP_DISPLAY_NUMBER || "").replace(/\D/g, "") || null;
+
+async function getWhatsAppNumber() {
+    if (cachedWaNumber) return cachedWaNumber;
+    const r = await axios.get(
+        `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}`,
+        {
+            params: { fields: "display_phone_number" },
+            headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+        }
+    );
+    cachedWaNumber = String(r.data.display_phone_number || "").replace(/\D/g, "") || null;
+    return cachedWaNumber;
+}
+
+app.get("/chat", async (req, res) => {
+    try {
+        const number = await getWhatsAppNumber();
+        if (!number) return res.status(500).send("WhatsApp number not configured.");
+        const text = typeof req.query.text === "string" && req.query.text.trim()
+            ? req.query.text.trim()
+            : DEFAULT_CHAT_PREFILL;
+        return res.redirect(302, `https://wa.me/${number}?text=${encodeURIComponent(text)}`);
+    } catch (err) {
+        console.error("Failed to resolve WhatsApp number for /chat:", err.response?.data || err.message);
+        return res.status(500).send("Unable to open WhatsApp chat right now.");
+    }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Webhook verification (Meta calls this)
 app.get("/webhook", (req, res) => {
     const mode = req.query["hub.mode"];
